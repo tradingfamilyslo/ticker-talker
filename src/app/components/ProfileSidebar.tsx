@@ -74,13 +74,6 @@ export default function ProfileSidebar({
     ).length;
   };
 
-  const getVerifyLabel = () => {
-    if (safeUserData.verify_source === 'ftmo') return 'FTMO Verified';
-    if (safeUserData.verify_source === 'mql5') return 'MQL5 Verified';
-    if (safeUserData.verify_source === 'binance') return 'Binance Verified';
-    return 'Myfxbook Verified';
-  };
-
   return (
     <div className="md:col-span-1 space-y-4 h-fit sticky top-6 transition-all duration-500">
       <div className={`p-8 rounded-[2.5rem] border transition-all duration-500 ${
@@ -150,65 +143,6 @@ export default function ProfileSidebar({
               </select>
             </div>
 
-            <div className="pt-2">
-              <label className={`block text-[8px] uppercase font-black mb-2 ml-1 ${darkMode ? 'text-blue-500' : 'text-blue-600'}`}>
-                Verification Source
-              </label>
-              <select 
-                value={safeUserData.verify_source || 'manual'} 
-                onChange={(e) => setUserData({...safeUserData, verify_source: e.target.value})}
-                className={`w-full border rounded-lg px-3 py-2 text-xs outline-none transition-colors ${
-                  darkMode ? 'bg-black border-zinc-800 text-white focus:border-blue-500' : 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:border-blue-600'
-                }`}
-              >
-                <option value="manual">Manual / Myfxbook</option>
-                <option value="ftmo">FTMO Leaderboard</option>
-                <option value="mql5">MQL5 Signal</option>
-                <option value="binance">Binance API</option>
-              </select>
-            </div>
-
-            {safeUserData.verify_source === 'ftmo' ? (
-              <div className="animate-in slide-in-from-top-2 duration-300">
-                <label className={`block text-[8px] uppercase font-black mb-1 ml-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>FTMO Username</label>
-                <input 
-                  type="text" 
-                  placeholder="Your FTMO Name..."
-                  value={safeUserData.ftmo_username || ''} 
-                  onChange={(e) => setUserData({...safeUserData, ftmo_username: e.target.value})} 
-                  className={`w-full border rounded-lg px-3 py-2 text-[10px] font-mono outline-none transition-colors ${
-                    darkMode ? 'bg-blue-500/5 border-blue-500/20 text-blue-300 focus:border-blue-500' : 'bg-blue-50 border-blue-200 text-blue-800 focus:border-blue-600'
-                  }`} 
-                />
-              </div>
-            ) : safeUserData.verify_source === 'mql5' ? (
-              <div className="animate-in slide-in-from-top-2 duration-300">
-                <label className={`block text-[8px] uppercase font-black mb-1 ml-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>MQL5 Signal URL</label>
-                <input 
-                  type="text" 
-                  placeholder="https://www.mql5.com/en/signals/..."
-                  value={safeUserData.mql5_url || ''} 
-                  onChange={(e) => setUserData({...safeUserData, mql5_url: e.target.value})} 
-                  className={`w-full border rounded-lg px-3 py-2 text-[10px] font-mono outline-none transition-colors ${
-                    darkMode ? 'bg-blue-500/5 border-blue-500/20 text-blue-300 focus:border-blue-500' : 'bg-blue-50 border-blue-200 text-blue-800 focus:border-blue-600'
-                  }`} 
-                />
-              </div>
-            ) : (
-              <div className="animate-in slide-in-from-top-2 duration-300">
-                <label className={`block text-[8px] uppercase font-black mb-1 ml-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Myfxbook Public URL (Optional)</label>
-                <input 
-                  type="text" 
-                  placeholder="https://myfxbook.com/members/..."
-                  value={safeUserData.myfxbook || ''} 
-                  onChange={(e) => setUserData({...safeUserData, myfxbook: e.target.value})} 
-                  className={`w-full border rounded-lg px-3 py-2 text-[10px] font-mono outline-none transition-colors ${
-                    darkMode ? 'bg-blue-500/5 border-blue-500/20 text-blue-300 focus:border-blue-500' : 'bg-blue-50 border-blue-200 text-blue-800 focus:border-blue-600'
-                  }`} 
-                />
-              </div>
-            )}
-
             <textarea 
               placeholder="Short bio..."
               value={safeUserData.bio || ""} 
@@ -269,39 +203,37 @@ export default function ProfileSidebar({
               </span>
             </div>
 
-            {(safeUserData.verify_source !== 'manual' || safeUserData.myfxbook || isOwnProfile) && (
-              <div className={`mt-5 p-4 rounded-2xl border ${darkMode ? 'bg-blue-950/20 border-blue-500/30' : 'bg-blue-50 border-blue-200'}`}>
-                <div className="flex items-center gap-1.5 mb-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-3.5 h-3.5 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                    <path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0112 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 013.498 1.307 4.491 4.491 0 011.307 3.497A4.49 4.49 0 0121.75 12a4.49 4.49 0 01-1.549 3.397 4.491 4.491 0 01-1.307 3.497 4.491 4.491 0 01-3.497 1.307A4.49 4.49 0 0112 21.75a4.49 4.49 0 01-3.397-1.549 4.49 4.49 0 01-3.498-1.306 4.491 4.491 0 01-1.307-3.498A4.49 4.49 0 012.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 011.307-3.497 4.49 4.49 0 013.497-1.307zm7.007 6.387a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
-                  </svg>
-                  <span className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {getVerifyLabel()}
+            <div className={`mt-5 p-4 rounded-2xl border ${darkMode ? 'bg-blue-950/20 border-blue-500/30' : 'bg-blue-50 border-blue-200'}`}>
+              <div className="flex items-center gap-1.5 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-3.5 h-3.5 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                  <path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0112 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 013.498 1.307 4.491 4.491 0 011.307 3.497A4.49 4.49 0 0121.75 12a4.49 4.49 0 01-1.549 3.397 4.491 4.491 0 01-1.307 3.497 4.491 4.491 0 01-3.497 1.307A4.49 4.49 0 0112 21.75a4.49 4.49 0 01-3.397-1.549 4.49 4.49 0 01-3.498-1.306 4.491 4.491 0 01-1.307-3.498A4.49 4.49 0 012.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 011.307-3.497 4.49 4.49 0 013.497-1.307zm7.007 6.387a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
+                </svg>
+                <span className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                  Terminal Verified
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-[7px] uppercase tracking-wider font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Total Gain</span>
+                  <span className={`text-xs font-black font-mono ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                    +{safeUserData.total_gain || '0.0'}%
                   </span>
                 </div>
-                
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="flex flex-col">
-                    <span className={`text-[7px] uppercase tracking-wider font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Total Gain</span>
-                    <span className={`text-xs font-black font-mono ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
-                      +{safeUserData.total_gain || '0.0'}%
-                    </span>
-                  </div>
-                  <div className="flex flex-col border-l pl-2 border-dashed border-blue-500/20">
-                    <span className={`text-[7px] uppercase tracking-wider font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Max DD</span>
-                    <span className={`text-xs font-black font-mono ${darkMode ? 'text-red-400' : 'text-red-500'}`}>
-                      -{safeUserData.max_drawdown || '0.0'}%
-                    </span>
-                  </div>
-                  <div className="flex flex-col border-l pl-2 border-dashed border-blue-500/20">
-                    <span className={`text-[7px] uppercase tracking-wider font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Win Rate</span>
-                    <span className={`text-xs font-black font-mono ${darkMode ? 'text-white' : 'text-zinc-900'}`}>
-                      {safeUserData.win_rate || '0'}%
-                    </span>
-                  </div>
+                <div className="flex flex-col border-l pl-2 border-dashed border-blue-500/20">
+                  <span className={`text-[7px] uppercase tracking-wider font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Max DD</span>
+                  <span className={`text-xs font-black font-mono ${darkMode ? 'text-red-400' : 'text-red-500'}`}>
+                    -{safeUserData.max_drawdown || '0.0'}%
+                  </span>
+                </div>
+                <div className="flex flex-col border-l pl-2 border-dashed border-blue-500/20">
+                  <span className={`text-[7px] uppercase tracking-wider font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Win Rate</span>
+                  <span className={`text-xs font-black font-mono ${darkMode ? 'text-white' : 'text-zinc-900'}`}>
+                    {safeUserData.win_rate || '0'}%
+                  </span>
                 </div>
               </div>
-            )}
+            </div>
 
             <div className={`flex gap-6 mt-6 border-y py-4 transition-colors ${
               darkMode ? 'border-zinc-800/50' : 'border-zinc-100'

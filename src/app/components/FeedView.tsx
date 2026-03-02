@@ -5,7 +5,8 @@ interface FeedViewProps {
   userData: any;
   posts: any[];
   onBack: () => void;
-  handleAddPost: () => void;
+  // POPRAVEK: Omogočimo, da gumb pošlje podatke o signalu naprej
+  handleAddPost: (signalData?: any) => void; 
   newPost: string;
   setNewPost: (val: string) => void;
   handleImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -44,6 +45,14 @@ export default function FeedView({
   const [searchTerm, setSearchTerm] = useState("");
   const [zoomImage, setZoomImage] = useState<string | null>(null);
 
+  // --- NOVI STATE-I ZA SIGNAL OBRAZEC ---
+  const [isSignalMode, setIsSignalMode] = useState(false);
+  const [signalPair, setSignalPair] = useState("");
+  const [signalDir, setSignalDir] = useState("LONG");
+  const [signalEntry, setSignalEntry] = useState("");
+  const [signalSL, setSignalSL] = useState("");
+  const [signalTP, setSignalTP] = useState("");
+
   const safePosts = Array.isArray(posts) ? posts : [];
   const totalBulls = safePosts.reduce((sum, p) => sum + (p.bulls || 0), 0);
   const totalBears = safePosts.reduce((sum, p) => sum + (p.bears || 0), 0);
@@ -53,6 +62,25 @@ export default function FeedView({
   const filteredPosts = safePosts.filter(post => 
     post.text && post.text.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // FUNKCIJA ZA ZDRUŽITEV PODATKOV IN OBJAVO
+  const handlePublishClick = () => {
+    if (isSignalMode) {
+      if (!signalPair || !signalEntry || !signalSL || !signalTP) {
+        alert("Please fill in all signal fields (Pair, Entry, SL, TP).");
+        return;
+      }
+      handleAddPost({
+        pair: signalPair.toUpperCase(),
+        direction: signalDir,
+        entry: parseFloat(signalEntry),
+        sl: parseFloat(signalSL),
+        tp: parseFloat(signalTP)
+      });
+    } else {
+      handleAddPost(); // Navadna objava
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -126,28 +154,59 @@ export default function FeedView({
 
       {/* 2. BROADCAST MODUL */}
       {isOwnProfile && (
-        <div className={`border rounded-[2rem] p-5 transition-all duration-500 ${
+        <div className={`border rounded-[2rem] p-5 transition-all duration-500 flex flex-col gap-4 ${
           darkMode 
             ? 'bg-zinc-900/40 border-blue-500/20 shadow-2xl' 
             : 'bg-white border-zinc-200 shadow-lg'
         }`}>
-          <div className="flex items-center gap-2 mb-4">
-            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${darkMode ? 'bg-blue-500' : 'bg-blue-600'}`} />
-            <span className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? 'text-blue-500/70' : 'text-blue-600'}`}>
-              Initial Broadcast
-            </span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${darkMode ? 'bg-blue-500' : 'bg-blue-600'}`} />
+              <span className={`text-[9px] font-black uppercase tracking-widest ${darkMode ? 'text-blue-500/70' : 'text-blue-600'}`}>
+                Initial Broadcast
+              </span>
+            </div>
           </div>
+
+          {/* --- NOVO: OKENCE ZA VNOS SIGNALA --- */}
+          {isSignalMode && (
+            <div className={`grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-2xl border ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+              <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
+                <label className={`text-[8px] font-black uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Pair</label>
+                <input type="text" placeholder="BTC/USD" value={signalPair} onChange={e => setSignalPair(e.target.value)} className={`bg-transparent border-b outline-none text-xs font-mono font-bold uppercase py-1 ${darkMode ? 'border-zinc-700 text-white focus:border-blue-500' : 'border-zinc-300 text-zinc-900 focus:border-blue-500'}`} />
+              </div>
+              <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
+                <label className={`text-[8px] font-black uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Direction</label>
+                <select value={signalDir} onChange={e => setSignalDir(e.target.value)} className={`bg-transparent border-b outline-none text-xs font-black py-1 cursor-pointer ${darkMode ? 'border-zinc-700' : 'border-zinc-300'} ${signalDir === 'LONG' ? 'text-green-500' : 'text-red-500'}`}>
+                  <option value="LONG">🟢 LONG</option>
+                  <option value="SHORT">🔴 SHORT</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[8px] font-black uppercase tracking-widest text-blue-500">Entry</label>
+                <input type="number" placeholder="0.00" value={signalEntry} onChange={e => setSignalEntry(e.target.value)} className={`bg-transparent border-b outline-none text-xs font-mono py-1 ${darkMode ? 'border-zinc-700 text-white focus:border-blue-500' : 'border-zinc-300 text-zinc-900 focus:border-blue-500'}`} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[8px] font-black uppercase tracking-widest text-red-500">Stop Loss</label>
+                <input type="number" placeholder="0.00" value={signalSL} onChange={e => setSignalSL(e.target.value)} className={`bg-transparent border-b outline-none text-xs font-mono py-1 ${darkMode ? 'border-zinc-700 text-white focus:border-red-500' : 'border-zinc-300 text-zinc-900 focus:border-red-500'}`} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[8px] font-black uppercase tracking-widest text-green-500">Take Profit</label>
+                <input type="number" placeholder="0.00" value={signalTP} onChange={e => setSignalTP(e.target.value)} className={`bg-transparent border-b outline-none text-xs font-mono py-1 ${darkMode ? 'border-zinc-700 text-white focus:border-green-500' : 'border-zinc-300 text-zinc-900 focus:border-green-500'}`} />
+              </div>
+            </div>
+          )}
 
           <textarea 
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
-            placeholder="Input signal data..."
-            className={`w-full bg-transparent border-none focus:ring-0 text-sm md:text-base font-light italic resize-none h-24 outline-none transition-colors ${
+            placeholder={isSignalMode ? "Additional intel or setup logic (optional)..." : "Input signal data..."}
+            className={`w-full bg-transparent border-none focus:ring-0 text-sm md:text-base font-light italic resize-none h-20 outline-none transition-colors ${
               darkMode ? 'text-zinc-100 placeholder:text-zinc-700' : 'text-zinc-900 placeholder:text-zinc-300'
             }`}
           />
 
-          <div className={`flex flex-col md:flex-row items-start md:items-center justify-between mt-2 pt-4 border-t gap-4 ${darkMode ? 'border-zinc-800/50' : 'border-zinc-100'}`}>
+          <div className={`flex flex-col lg:flex-row items-start lg:items-center justify-between mt-2 pt-4 border-t gap-4 ${darkMode ? 'border-zinc-800/50' : 'border-zinc-100'}`}>
             <div className="flex items-center gap-4">
               <label className="cursor-pointer group flex items-center gap-2 relative">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-all ${
@@ -167,7 +226,31 @@ export default function FeedView({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+               
+               {/* --- NOVI GUMB ZA IZBIRO: POST vs SIGNAL --- */}
+               <div className={`flex p-1 rounded-xl border transition-all ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'}`}>
+                 <button 
+                    type="button"
+                    onClick={() => setIsSignalMode(false)}
+                    className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                      !isSignalMode ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-400'
+                    }`}
+                  >
+                    💬 Post
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setIsSignalMode(true)}
+                    className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                      isSignalMode ? 'bg-green-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-400'
+                    }`}
+                  >
+                    🎯 Signal
+                  </button>
+               </div>
+
+               {/* --- OBSTOJEČI GUMB: FREE vs PREM --- */}
                {setIsPremium && (
                  <div className={`flex p-1 rounded-xl border transition-all ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'}`}>
                    <button 
@@ -211,10 +294,10 @@ export default function FeedView({
                )}
 
               <button 
-                onClick={handleAddPost}
-                disabled={!newPost.trim() && !selectedImage}
-                className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${
-                  (newPost.trim() || selectedImage) 
+                onClick={handlePublishClick}
+                disabled={(!newPost.trim() && !selectedImage && !isSignalMode) || (isSignalMode && (!signalPair || !signalEntry || !signalSL || !signalTP))}
+                className={`flex-1 lg:flex-none px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${
+                  ((newPost.trim() || selectedImage) || (isSignalMode && signalPair))
                     ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20' 
                     : (darkMode ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed')
                 }`}
@@ -320,9 +403,38 @@ export default function FeedView({
                             </div>
                           </div>
                       ) : (
-                        <p className={`text-sm md:text-base font-light leading-relaxed italic break-words ${darkMode ? 'text-zinc-300' : 'text-zinc-800'}`}>
-                          "{post.text}"
-                        </p>
+                        <div>
+                          {/* PRIKAZ SIGNALA, ČE JE BIL OBJAVLEN KOT SIGNAL */}
+                          {post.pair && (
+                             <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border ${darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                                <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                   <span className="text-[7px] uppercase font-black text-zinc-500">Pair</span>
+                                   <span className={`text-[11px] font-black font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.pair}</span>
+                                </div>
+                                <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                   <span className="text-[7px] uppercase font-black text-zinc-500">Dir</span>
+                                   <span className={`text-[11px] font-black ${post.direction === 'LONG' ? 'text-green-500' : 'text-red-500'}`}>
+                                      {post.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT'}
+                                   </span>
+                                </div>
+                                <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                   <span className="text-[7px] uppercase font-black text-blue-500">Entry</span>
+                                   <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.entry}</span>
+                                </div>
+                                <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                   <span className="text-[7px] uppercase font-black text-red-500">SL</span>
+                                   <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.sl}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                   <span className="text-[7px] uppercase font-black text-green-500">TP</span>
+                                   <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.tp}</span>
+                                </div>
+                             </div>
+                          )}
+                          <p className={`text-sm md:text-base font-light leading-relaxed italic break-words ${darkMode ? 'text-zinc-300' : 'text-zinc-800'}`}>
+                            "{post.text}"
+                          </p>
+                        </div>
                       )}
                     </div>
 

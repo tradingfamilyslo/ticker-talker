@@ -257,7 +257,14 @@ export default function Home() {
           created_at: p.created_at,
           is_premium: p.is_premium || false,
           price_bulls: p.price_bulls || 0,
-          is_unlocked: unlockedIds.has(p.id) // Preverimo če je odklep v bazi
+          is_unlocked: unlockedIds.has(p.id), // Preverimo če je odklep v bazi
+          // --- DODANO BRANJE NOVIH SIGNAL PODATKOV IZ BAZE ---
+          pair: p.pair,
+          direction: p.direction,
+          entry: p.entry_price,
+          sl: p.sl_price,
+          tp: p.tp_price,
+          signal_status: p.signal_status
         }));
         setPosts(formatted);
       }
@@ -340,19 +347,57 @@ export default function Home() {
 
   const fetchAllProfiles = async () => {
     try {
-      const { data, error } = await supabase
+      // SPREMEMBA: Pridobivanje "signalnih" statistik namesto MyFxBook statistik
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('alias, country, avatar_url, style, myfxbook_url, total_gain, max_drawdown, win_rate, verify_source, earned_balance');
-      
-      if (error) {
-        console.error("Error fetching profiles:", error);
+        .select('id, alias, country, avatar_url, style, verify_source, earned_balance');
+        
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        return;
       } 
       
-      if (data) {
-        const formattedProfiles = data.map((p: any) => ({
-          ...p,
-          avatar: p.avatar_url 
-        }));
+      // Za vsak profil moramo izračunati uspeh na podlagi njegovih signalov
+      const { data: postsData, error: postsError } = await supabase
+        .from('posts_with_profiles')
+        .select('user_id, bulls, bears');
+        
+      if (postsError) {
+         console.error("Error fetching posts for stats:", postsError);
+      }
+
+      if (profilesData) {
+        const formattedProfiles = profilesData.map((p: any) => {
+          
+          // Filtriramo objave trenutnega profila
+          const userPosts = postsData ? postsData.filter((post: any) => post.user_id === p.id) : [];
+          
+          let totalBulls = 0;
+          let totalBears = 0;
+          let winRate = 0;
+          
+          userPosts.forEach((post: any) => {
+             totalBulls += (post.bulls || 0);
+             totalBears += (post.bears || 0);
+          });
+          
+          const totalVotes = totalBulls + totalBears;
+          
+          if (totalVotes > 0) {
+             winRate = Math.round((totalBulls / totalVotes) * 100);
+          }
+          
+          // Tukaj nadomestimo MyFxBook podatke s podatki o signalih
+          return {
+            ...p,
+            avatar: p.avatar_url,
+            total_gain: totalBulls, // Uporabimo "gain" kot število zbranih Bullsov
+            max_drawdown: totalBears, // Uporabimo "drawdown" kot število zbranih Bearsov
+            win_rate: winRate, // Dejanski win rate glede na glasove
+            myfxbook_url: '' // Odstranjeno
+          };
+        });
+        
         setAllProfiles(formattedProfiles);
       }
     } catch (err) {
@@ -492,46 +537,9 @@ export default function Home() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      let stats = { gain: userData.total_gain || 0, drawdown: userData.max_drawdown || 0, winRate: userData.win_rate || 0 };
-
-      // --- DINAMIČNA VERIFIKACIJA: Myfxbook, MQL5 ali FTMO ---
-      if (userData.verify_source === 'mql5' && userData.mql5_url) {
-        const res = await fetch('/api/fetch-mql5', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: userData.mql5_url }),
-        });
-        const d = await res.json();
-        if (!d.error) stats = { gain: parseFloat(d.gain), drawdown: parseFloat(d.drawdown), winRate: stats.winRate };
-      } 
-      else if (userData.verify_source === 'ftmo' && userData.ftmo_username) {
-        const res = await fetch('/api/fetch-ftmo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: userData.ftmo_username }),
-        });
-        const d = await res.json();
-        if (!d.error) stats.gain = parseFloat(d.profit.replace(/[^0-9.-]+/g,""));
-      }
-      else if (userData.myfxbook && userData.myfxbook.includes('myfxbook.com')) {
-        try {
-          const res = await fetch('/api/fetch-myfxbook', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: userData.myfxbook }),
-          });
-          const data = await res.json();
-          if (!data.error) {
-            stats = {
-              gain: !isNaN(parseFloat(data.gain)) ? parseFloat(data.gain) : stats.gain,
-              drawdown: !isNaN(parseFloat(data.drawdown)) ? parseFloat(data.drawdown) : stats.drawdown,
-              winRate: !isNaN(parseInt(data.winRate)) ? parseInt(data.winRate) : stats.winRate
-            };
-          }
-        } catch (e) {
-          console.error("Myfxbook fetch failed", e);
-        }
-      }
+      // SPREMEMBA: Odstranili smo zunanje API klice za MyFxBook, MQL5, in FTMO.
+      // Profil sedaj posodablja le ročno vnesene podatke in osnovne nastavitve.
+      // Ohranili smo spremenljivke, da preprečimo napake v ostalih komponentah.
 
       const updates: any = {
         id: user.id,
@@ -541,13 +549,13 @@ export default function Home() {
         country: userData.country,
         style: userData.style,
         market: userData.market,
-        myfxbook_url: userData.myfxbook || null,
-        total_gain: stats.gain,
-        max_drawdown: stats.drawdown,
-        win_rate: stats.winRate, 
-        verify_source: userData.verify_source,
-        ftmo_username: userData.ftmo_username,
-        mql5_url: userData.mql5_url,
+        // myfxbook_url: userData.myfxbook || null, // Odstranjeno
+        // total_gain: stats.gain,                  // Posodablja se dinamično preko signalov
+        // max_drawdown: stats.drawdown,            // Posodablja se dinamično preko signalov
+        // win_rate: stats.winRate,                 // Posodablja se dinamično preko signalov
+        verify_source: 'manual', // Prisilimo ročno, saj ni več zunanjih orodij
+        // ftmo_username: userData.ftmo_username,   // Odstranjeno
+        // mql5_url: userData.mql5_url,             // Odstranjeno
         updated_at: new Date()
       };
 
@@ -565,6 +573,9 @@ export default function Home() {
             ...updates,
             avatar: updates.avatar_url 
         }));
+        
+        // Osvežimo statistiko, ki se izračuna na podlagi signalov
+        fetchAllProfiles(); 
       }
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -604,6 +615,9 @@ export default function Home() {
 
       await supabase.from('posts').update(updates).eq('id', postId);
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
+      
+      // SPREMEMBA: Po glasovanju osvežimo profile, saj se na podlagi glasov preračuna win rate in profit
+      fetchAllProfiles(); 
     } catch (err) {
       console.error("Voting error:", err);
     }
@@ -619,15 +633,19 @@ export default function Home() {
         alert("Error deleting: " + error.message);
       } else {
         fetchPostsFromDB();
+        // Osvežimo statistiko
+        fetchAllProfiles();
       }
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleAddPost = async () => {
-    if (!newPost.trim() && !selectedImage) {
-        alert("Write something or upload intel first.");
+  // --- POPRAVLJENO: SPREJEMANJE SIGNAL PODATKOV IZ FEEDVIEW ---
+  const handleAddPost = async (signalData?: any) => {
+    // Če ni navadnega teksta, ne slike, in ni podatkov o signalu -> zavrni
+    if (!newPost.trim() && !selectedImage && !signalData) {
+        alert("Write something, upload intel, or fill out the signal details.");
         return;
     }
     
@@ -649,15 +667,22 @@ export default function Home() {
         finalImageUrl = urlData.publicUrl;
       }
 
+      // Združimo osnovne podatke z morebitnimi "Signal" podatki
       const newPostData = {
         text: newPost,
         image_url: finalImageUrl,
         author_alias: userData.alias || user.user_metadata.alias || "Anonymous",
         author_country: userData.country || "🇸🇮",
         user_id: user.id,
-        // --- DODANO ZA PREMIUM ---
         is_premium: isPremium,
-        price_bulls: isPremium ? priceBulls : 0 
+        price_bulls: isPremium ? priceBulls : 0,
+        // Dodamo signalne podatke (če obstajajo) v ustrezne stolpce
+        pair: signalData?.pair || null,
+        direction: signalData?.direction || null,
+        entry_price: signalData?.entry || null,
+        sl_price: signalData?.sl || null,
+        tp_price: signalData?.tp || null,
+        signal_status: signalData ? 'open' : null // Ob objavi je signal odprt
       };
 
       const { error } = await supabase.from('posts').insert([newPostData]).select();
@@ -668,10 +693,10 @@ export default function Home() {
       } else {
           setNewPost("");
           setSelectedImage(null);
-          // --- DODANO: Resetiranje state-a za naslednjo objavo ---
           setIsPremium(false);
           setPriceBulls(5);
           fetchPostsFromDB();
+          fetchAllProfiles();
       }
     } catch (err: any) {
       console.error(err);
@@ -829,6 +854,8 @@ export default function Home() {
         table: 'posts' 
       }, () => {
         fetchPostsFromDB();
+        // Osvežimo statistiko profilov ob novih objavah/glasovih
+        fetchAllProfiles(); 
       })
       .subscribe();
 
@@ -899,13 +926,13 @@ export default function Home() {
             style: profileData.style || session.user.user_metadata.style,
             market: profileData.market || session.user.user_metadata.market,
             following: session.user.user_metadata.following || [],
-            myfxbook: profileData.myfxbook_url || '',
+            // myfxbook: profileData.myfxbook_url || '', // Odstranjeno
             total_gain: profileData.total_gain || 0,
             max_drawdown: profileData.max_drawdown || 0,
             win_rate: profileData.win_rate || 0,
             verify_source: profileData.verify_source || 'manual',
-            ftmo_username: profileData.ftmo_username || '',
-            mql5_url: profileData.mql5_url || '',
+            // ftmo_username: profileData.ftmo_username || '', // Odstranjeno
+            // mql5_url: profileData.mql5_url || '', // Odstranjeno
             gains_balance: balanceData?.bulls_balance || 0,
             earned_balance: profileData.earned_balance || 0 // DODANO ZASLUŽEK
           }));
