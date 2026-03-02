@@ -14,9 +14,6 @@ import WalletView from './components/WalletView'; // DODAN UVOZ
 import AdBanner from './components/AdBanner'; // DODANO ZA OGLASE
 import AdCreatorModal from './components/AdCreatorModal'; // DODANO ZA ODRPEANJE MODALA
 
-// STRIPE UVOZ
-import { loadStripe } from '@stripe/stripe-js';
-
 // TUKAJ UVOZI SVOJ SUPABASE CLIENT
 import { supabase } from '@/lib/supabaseClient';
 
@@ -111,7 +108,7 @@ export default function Home() {
   }, [activeChat]);
 
   // --- DODANO: STRIPE PROCES NAKUPA ---
-  // --- POSODOBLJEN STRIPE PROCES (BrezredirectToCheckout napake) ---
+  // --- POSODOBLJEN STRIPE PROCES (Brez redirectToCheckout napake) ---
   const handleStripePurchase = async (amount: number) => {
     try {
       const response = await fetch('/api/checkout', {
@@ -129,12 +126,6 @@ export default function Home() {
       // SPREMEMBA: Uporabimo direkten URL namesto stare Stripe funkcije
       if (session.url) {
         window.location.href = session.url; 
-      } else if (session.id) {
-         // Fallback če server vrne samo ID
-         const stripe = await loadStripe("pk_live_51T6Wi94ADujZOrnxLksKfvQOQf4bWZduTfuswdZhiS0IdsJjWBCyVfvQdMQlYj3IngU6UfP5RJs7PzVsakZ2r7UU009dy68Mza");
-         if (stripe) {
-            await (stripe as any).redirectToCheckout({ sessionId: session.id });
-         }
       } else {
         alert("Server failed to create Stripe session.");
       }
@@ -152,7 +143,7 @@ export default function Home() {
         .from('user_balances')
         .select('bulls_balance')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle(); // Uporaba maybeSingle namesto single
       
       const currentBalance = wallet ? wallet.bulls_balance : 0;
       const newBalance = currentBalance + amount;
@@ -278,7 +269,7 @@ export default function Home() {
         .from('user_balances')
         .select('bulls_balance')
         .eq('user_id', userData.id)
-        .single();
+        .maybeSingle();
 
       if (walletErr || !wallet || wallet.bulls_balance < price) {
         alert("Insufficient GAINS! Please top up your wallet.");
@@ -319,7 +310,7 @@ export default function Home() {
     const { data: prof } = await supabase.from('profiles').select('id').eq('alias', targetAlias).single();
     if (!prof) return; 
 
-    const { data: existing } = await supabase.from('follows').select('*').eq('follower_id', userData.id).eq('following_id', prof.id).single();
+    const { data: existing } = await supabase.from('follows').select('*').eq('follower_id', userData.id).eq('following_id', prof.id).maybeSingle();
 
     if (existing) {
       await supabase.from('follows').delete().eq('follower_id', userData.id).eq('following_id', prof.id);
@@ -484,7 +475,7 @@ export default function Home() {
     let targetId = userData.id;
 
     if (viewingAlias && viewingAlias !== userData.alias) {
-      const { data: prof } = await supabase.from('profiles').select('id').eq('alias', viewingAlias).single();
+      const { data: prof } = await supabase.from('profiles').select('id').eq('alias', viewingAlias).maybeSingle();
       if (prof) targetId = prof.id;
       else { setFollowersCount(0); setFollowingCount(0); return; }
     }
@@ -498,7 +489,7 @@ export default function Home() {
     setFollowingCount(following || 0);
 
     if (viewingAlias && viewingAlias !== userData.alias) {
-      const { data } = await supabase.from('follows').select('*').eq('follower_id', userData.id).eq('following_id', targetId).single();
+      const { data } = await supabase.from('follows').select('*').eq('follower_id', userData.id).eq('following_id', targetId).maybeSingle();
       setIsFollowingViewingUser(!!data);
     }
   };
@@ -513,7 +504,7 @@ export default function Home() {
   const handleOpenFollowList = async (type: 'followers' | 'following') => {
     let targetId = userData.id;
     if (viewingAlias && viewingAlias !== userData.alias) {
-      const { data: prof } = await supabase.from('profiles').select('id').eq('alias', viewingAlias).single();
+      const { data: prof } = await supabase.from('profiles').select('id').eq('alias', viewingAlias).maybeSingle();
       if (prof) targetId = prof.id;
       else return;
     }
@@ -587,7 +578,7 @@ export default function Home() {
         .select('*')
         .eq('user_id', userData.id)
         .eq('post_id', postId)
-        .single();
+        .maybeSingle();
 
       const postToUpdate = posts.find(p => p.id === postId);
       if (!postToUpdate) return;
@@ -905,7 +896,7 @@ export default function Home() {
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle(); // Dodano maybeSingle tu za vsak slučaj
 
         if (profileData) {
           // SPREMEMBA: Uporaba maybeSingle, da ne meče 406 napake

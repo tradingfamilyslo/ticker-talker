@@ -33,7 +33,8 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ id: session.id });
+    // SPREMENJENO: Vrnemo celoten URL, da ga frontend samo odpre, namesto ID-ja
+    return NextResponse.json({ url: session.url });
   } catch (err: any) {
     console.error("Stripe Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
