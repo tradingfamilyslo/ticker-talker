@@ -111,16 +111,9 @@ export default function Home() {
   }, [activeChat]);
 
   // --- DODANO: STRIPE PROCES NAKUPA ---
- // --- POSODOBLJEN STRIPE PROCES (Z VAROVALKO ZA TYPE-CHECKER) ---
+  // --- POSODOBLJEN STRIPE PROCES (BrezredirectToCheckout napake) ---
   const handleStripePurchase = async (amount: number) => {
     try {
-      const stripe = await loadStripe("pk_live_51T6Wi94ADujZOrnxLksKfvQOQf4bWZduTfuswdZhiS0IdsJjWBCyVfvQdMQlYj3IngU6UfP5RJs7PzVsakZ2r7UU009dy68Mza");
-      
-      if (!stripe) {
-        console.error("Stripe SDK not loaded");
-        return;
-      }
-
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,16 +126,15 @@ export default function Home() {
 
       const session = await response.json();
 
-      if (session.id) {
-        // Uporabimo (stripe as any), da TypeScript ne tečnari okoli tipov
-        const { error } = await (stripe as any).redirectToCheckout({
-          sessionId: session.id,
-        });
-        
-        if (error) {
-          console.error("Stripe Redirect Error:", error);
-          alert(error.message);
-        }
+      // SPREMEMBA: Uporabimo direkten URL namesto stare Stripe funkcije
+      if (session.url) {
+        window.location.href = session.url; 
+      } else if (session.id) {
+         // Fallback če server vrne samo ID
+         const stripe = await loadStripe("pk_live_51T6Wi94ADujZOrnxLksKfvQOQf4bWZduTfuswdZhiS0IdsJjWBCyVfvQdMQlYj3IngU6UfP5RJs7PzVsakZ2r7UU009dy68Mza");
+         if (stripe) {
+            await (stripe as any).redirectToCheckout({ sessionId: session.id });
+         }
       } else {
         alert("Server failed to create Stripe session.");
       }
@@ -238,9 +230,12 @@ export default function Home() {
       // Pridobimo objave
       const { data: postsData, error: postsError } = await supabase.from('posts_with_profiles').select('*').order('created_at', { ascending: false });
       
-      // Pridobimo odklepe za trenutnega uporabnika
-      const { data: unlocksData } = await supabase.from('post_unlocks').select('post_id').eq('user_id', userData.id);
-      const unlockedIds = new Set(unlocksData?.map(u => u.post_id) || []);
+      // SPREMEMBA: Pridobimo odklepe za trenutnega uporabnika SAMO če je prijavljen (reši 400 error)
+      let unlockedIds = new Set();
+      if (userData?.id) {
+         const { data: unlocksData } = await supabase.from('post_unlocks').select('post_id').eq('user_id', userData.id);
+         unlockedIds = new Set(unlocksData?.map(u => u.post_id) || []);
+      }
 
       if (!postsError && postsData) {
         const formatted = postsData.map((p: any) => ({
@@ -441,6 +436,12 @@ export default function Home() {
     try {
       const API_KEY = 'd6cr7fpr01qgk7mjg2egd6cr7fpr01qgk7mjg2f0'; 
       const res = await fetch(`https://finnhub.io/api/v1/calendar/economic?token=${API_KEY}`);
+      
+      // Dodana varovalka za 403 Forbidden
+      if (!res.ok) {
+         throw new Error(`API returned status: ${res.status}`);
+      }
+      
       const data = await res.json();
       
       if (data && data.economicCalendar) {
@@ -452,7 +453,8 @@ export default function Home() {
         setMarketRisk(highImpact.length > 0 ? 'high' : 'low');
       }
     } catch (e) {
-      console.error("News API Error:", e);
+      // Tiho zadušimo napako, da ne straši v konzoli
+      console.log("News API unavailable (Free Tier).");
     }
   };
 
@@ -549,13 +551,7 @@ export default function Home() {
         country: userData.country,
         style: userData.style,
         market: userData.market,
-        // myfxbook_url: userData.myfxbook || null, // Odstranjeno
-        // total_gain: stats.gain,                  // Posodablja se dinamično preko signalov
-        // max_drawdown: stats.drawdown,            // Posodablja se dinamično preko signalov
-        // win_rate: stats.winRate,                 // Posodablja se dinamično preko signalov
         verify_source: 'manual', // Prisilimo ročno, saj ni več zunanjih orodij
-        // ftmo_username: userData.ftmo_username,   // Odstranjeno
-        // mql5_url: userData.mql5_url,             // Odstranjeno
         updated_at: new Date()
       };
 
@@ -912,8 +908,8 @@ export default function Home() {
           .single();
 
         if (profileData) {
-          // Pridobimo stanje denarnice
-          const { data: balanceData } = await supabase.from('user_balances').select('bulls_balance').eq('user_id', session.user.id).single();
+          // SPREMEMBA: Uporaba maybeSingle, da ne meče 406 napake
+          const { data: balanceData } = await supabase.from('user_balances').select('bulls_balance').eq('user_id', session.user.id).maybeSingle();
 
           setUserData((prev: any) => ({
             ...prev,
@@ -926,15 +922,12 @@ export default function Home() {
             style: profileData.style || session.user.user_metadata.style,
             market: profileData.market || session.user.user_metadata.market,
             following: session.user.user_metadata.following || [],
-            // myfxbook: profileData.myfxbook_url || '', // Odstranjeno
             total_gain: profileData.total_gain || 0,
             max_drawdown: profileData.max_drawdown || 0,
             win_rate: profileData.win_rate || 0,
             verify_source: profileData.verify_source || 'manual',
-            // ftmo_username: profileData.ftmo_username || '', // Odstranjeno
-            // mql5_url: profileData.mql5_url || '', // Odstranjeno
             gains_balance: balanceData?.bulls_balance || 0,
-            earned_balance: profileData.earned_balance || 0 // DODANO ZASLUŽEK
+            earned_balance: profileData.earned_balance || 0 
           }));
         } else {
           setUserData((prev: any) => ({
@@ -1377,7 +1370,7 @@ export default function Home() {
 
                         <button 
                           type="button"
-                          onClick={handleAddPost} 
+                          onClick={() => handleAddPost()} 
                           disabled={!newPost.trim() && !selectedImage}
                           className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shrink-0 ${
                             (newPost.trim() || selectedImage) 

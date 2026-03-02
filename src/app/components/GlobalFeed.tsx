@@ -290,11 +290,40 @@ export default function GlobalFeed({
                             </div>
                           </div>
                         ) : (
-                          <p className={`text-xs md:text-[13px] font-medium leading-relaxed tracking-tight mb-4 break-words ${
-                            darkMode ? 'text-zinc-300' : 'text-zinc-700'
-                          }`}>
-                            {post.text}
-                          </p>
+                          <div>
+                            {/* PRIKAZ SIGNALA ZA GLOBAL FEED */}
+                            {post.pair && (
+                               <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border ${darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                                  <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                     <span className="text-[7px] uppercase font-black text-zinc-500">Pair</span>
+                                     <span className={`text-[11px] font-black font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.pair}</span>
+                                  </div>
+                                  <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                     <span className="text-[7px] uppercase font-black text-zinc-500">Dir</span>
+                                     <span className={`text-[11px] font-black ${post.direction === 'LONG' ? 'text-green-500' : 'text-red-500'}`}>
+                                        {post.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT'}
+                                     </span>
+                                  </div>
+                                  <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                     <span className="text-[7px] uppercase font-black text-blue-500">Entry</span>
+                                     <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.entry}</span>
+                                  </div>
+                                  <div className="flex flex-col pr-4 border-r border-zinc-700/30">
+                                     <span className="text-[7px] uppercase font-black text-red-500">SL</span>
+                                     <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.sl}</span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                     <span className="text-[7px] uppercase font-black text-green-500">TP</span>
+                                     <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.tp}</span>
+                                  </div>
+                               </div>
+                            )}
+                            <p className={`text-xs md:text-[13px] font-medium leading-relaxed tracking-tight mb-4 break-words ${
+                              darkMode ? 'text-zinc-300' : 'text-zinc-700'
+                            }`}>
+                              {post.text}
+                            </p>
+                          </div>
                         )}
                       </div>
 
