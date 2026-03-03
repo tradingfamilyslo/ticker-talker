@@ -1,10 +1,25 @@
 "use client";
 import React, { useState } from 'react';
 
+// --- SEZNAM VSEH PODPRTIH PAROV ZA AVTOMATSKEGA SODNIKA ---
+const POPULAR_PAIRS = [
+  // Crypto
+  "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "BNB/USD", "ADA/USD", "DOT/USD", "LINK/USD", "AVAX/USD", "DOGE/USD",
+  // Forex
+  "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "NZD/USD", "USD/CHF", "EUR/GBP", "EUR/JPY", "GBP/JPY",
+  // Indices
+  "US30/USD", "NAS100/USD", "SPX500/USD", "GER40/EUR", "UK100/GBP",
+  // Commodities
+  "XAU/USD", "XAG/USD", "WTI/USD",
+  // Stocks (Delnice)
+  "AAPL/USD", "TSLA/USD", "NVDA/USD", "AMZN/USD", "MSFT/USD", "GOOGL/USD", "META/USD", "NFLX/USD", "AMD/USD"
+];
+
 interface FeedViewProps {
   userData: any;
   posts: any[];
   onBack: () => void;
+  // POPRAVEK: Omogočimo, da gumb pošlje podatke o signalu naprej
   handleAddPost: (signalData?: any) => void; 
   newPost: string;
   setNewPost: (val: string) => void;
@@ -185,7 +200,19 @@ export default function FeedView({
             <div className={`grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-2xl border ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
               <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
                 <label className={`text-[8px] font-black uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Pair</label>
-                <input type="text" placeholder="BTC/USD" value={signalPair} onChange={e => setSignalPair(e.target.value)} className={`bg-transparent border-b outline-none text-xs font-mono font-bold uppercase py-1 ${darkMode ? 'border-zinc-700 text-white focus:border-blue-500' : 'border-zinc-300 text-zinc-900 focus:border-blue-500'}`} />
+                <input 
+                  type="text" 
+                  list="popular-pairs"
+                  placeholder="BTC/USD" 
+                  value={signalPair} 
+                  onChange={e => setSignalPair(e.target.value)} 
+                  className={`bg-transparent border-b outline-none text-xs font-mono font-bold uppercase py-1 ${darkMode ? 'border-zinc-700 text-white focus:border-blue-500' : 'border-zinc-300 text-zinc-900 focus:border-blue-500'}`} 
+                />
+                <datalist id="popular-pairs">
+                  {POPULAR_PAIRS.map(pair => (
+                    <option key={pair} value={pair} />
+                  ))}
+                </datalist>
               </div>
               <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
                 <label className={`text-[8px] font-black uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Direction</label>
@@ -434,7 +461,7 @@ export default function FeedView({
 
                           {/* PRIKAZ SIGNALA, ČE JE BIL OBJAVLEN KOT SIGNAL */}
                           {post.pair && (
-                             <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border ${
+                             <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border relative overflow-hidden ${
                                  isClosed ? (darkMode ? 'bg-black/50 border-zinc-900' : 'bg-zinc-100 border-zinc-300 opacity-70') : 
                                  (darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200')
                              }`}>
@@ -456,10 +483,23 @@ export default function FeedView({
                                    <span className="text-[7px] uppercase font-black text-red-500">SL</span>
                                    <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.sl}</span>
                                 </div>
-                                <div className="flex flex-col">
+                                <div className="flex flex-col pr-4 border-r border-zinc-700/30">
                                    <span className="text-[7px] uppercase font-black text-green-500">TP</span>
                                    <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.tp}</span>
                                 </div>
+
+                                {/* DODANA IZSTOPNA CENA (EXIT LOCK) */}
+                                {isClosed && post.exit_price && (
+                                  <div className="flex flex-col pl-4 border-l border-zinc-700/30 animate-in fade-in duration-1000">
+                                    <span className="text-[7px] uppercase font-black text-blue-400">Exit Lock</span>
+                                    <span className={`text-[11px] font-mono font-black ${
+                                      post.signal_status === 'win' ? 'text-green-500' : 
+                                      post.signal_status === 'loss' ? 'text-red-500' : 'text-blue-500'
+                                    }`}>
+                                      {post.exit_price}
+                                    </span>
+                                  </div>
+                                )}
 
                                 {/* GUMBI ZA MANUAL CONTROL */}
                                 {isOwnProfile && !isClosed && handleSignalAction && (

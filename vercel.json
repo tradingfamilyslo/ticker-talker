@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/resolve-signals",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

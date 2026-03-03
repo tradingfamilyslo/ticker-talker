@@ -249,27 +249,44 @@ export default function Home() {
     }
   };
 
-  // --- DODANO: FUNKCIJA ZA MANUALNO ZAPIRANJE IN BE ---
+  // --- POPRAVLJENO: FUNKCIJA ZA MANUALNO ZAPIRANJE IN BE (Z LOCK EXIT PRICE) ---
   const handleSignalAction = async (postId: string, actionType: 'manual_close' | 'set_be') => {
     if (!userData.id) return;
     
-    // Samo preprečimo napačne klike, trejder sam oceni kdaj klikniti.
     if (!confirm(`Are you sure you want to set this signal to: ${actionType === 'manual_close' ? 'CLOSE NOW' : 'BREAK EVEN'}?`)) return;
 
-    const newStatus = actionType === 'manual_close' ? 'manual_exit' : 'be_void';
-
     try {
+        let exitPrice = null;
+        const newStatus = actionType === 'manual_close' ? 'manual_exit' : 'be_void';
+
+        // Če zapira ročno, pridobimo zadnjo ceno iz našega API-ja, da jo zaklenemo
+        if (actionType === 'manual_close') {
+            const post = posts.find(p => p.id === postId);
+            const priceRes = await fetch('/api/prices');
+            const currentMarketPrices = await priceRes.json();
+            if (post && currentMarketPrices[post.pair]) {
+                exitPrice = parseFloat(currentMarketPrices[post.pair].price);
+            }
+        } else {
+            // Če je Break Even, vzamemo kar vstopno ceno (Entry) tega posta
+            const post = posts.find(p => p.id === postId);
+            exitPrice = post?.entry || 0;
+        }
+
         const { error } = await supabase
             .from('posts')
-            .update({ signal_status: newStatus })
+            .update({ 
+                signal_status: newStatus,
+                exit_price: exitPrice 
+            })
             .eq('id', postId)
-            .eq('user_id', userData.id); // Varnost, da lahko samo avtor to stori
+            .eq('user_id', userData.id);
 
         if (error) throw error;
         
-        alert(`Signal status updated to ${newStatus.toUpperCase()}`);
-        fetchPostsFromDB(); // Osveži feed, da dobi status in barve
-        fetchAllProfiles(); // Osveži profilno statistiko z novimi izidi
+        alert(`Signal locked at ${exitPrice || 'N/A'}. Status: ${newStatus.toUpperCase()}`);
+        fetchPostsFromDB(); 
+        fetchAllProfiles(); 
     } catch (err) {
         console.error("Error updating signal status:", err);
         alert("Failed to update signal status.");
@@ -380,11 +397,10 @@ export default function Home() {
         return;
       } 
       
-      // Beremo samo tiste objave, ki SO signali (imajo signal_status)
       const { data: postsData, error: postsError } = await supabase
         .from('posts_with_profiles')
         .select('user_id, signal_status')
-        .not('signal_status', 'is', null); // Pridobi samo prave signale
+        .not('signal_status', 'is', null); 
         
       if (postsError) {
          console.error("Error fetching posts for stats:", postsError);
@@ -400,14 +416,12 @@ export default function Home() {
           let winRate = 0;
           
           userSignals.forEach((signal: any) => {
-             // Win so zadeti TP-ji IN ročni profiti
              if (signal.signal_status === 'win' || signal.signal_status === 'manual_exit') {
                  totalWins += 1;
              } 
              else if (signal.signal_status === 'loss') {
                  totalLosses += 1;
              }
-             // 'be_void' in 'open' se preskočita in ne vplivata na Win Rate!
           });
           
           const totalValidTrades = totalWins + totalLosses;
@@ -419,9 +433,9 @@ export default function Home() {
           return {
             ...p,
             avatar: p.avatar_url,
-            total_gain: totalWins,       // Sedaj kaže število pravih ZMAG
-            max_drawdown: totalLosses,   // Sedaj kaže število pravih PORAZOV
-            win_rate: winRate,           // % izračunan na podlagi pravih trejdov
+            total_gain: totalWins,       
+            max_drawdown: totalLosses,   
+            win_rate: winRate,           
             myfxbook_url: '' 
           };
         });
@@ -489,7 +503,6 @@ export default function Home() {
     }
   };
 
-  // --- POPRAVLJENO: LEADERBOARD BERE PRAVE ZMAGE IN NE VEČ GLASOV ---
   const getDailyTopTraders = () => {
     const scores: { [key: string]: { alias: string, bulls: number, country: string } } = {};
     const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -497,12 +510,10 @@ export default function Home() {
     if (!Array.isArray(posts)) return [];
 
     posts.forEach(p => {
-      // Gledamo samo signale v zadnjih 24h, ki so označeni kot 'win' ali 'manual_exit'
       if (p.created_at && new Date(p.created_at).getTime() > twentyFourHoursAgo) {
         if (!scores[p.authorAlias]) {
           scores[p.authorAlias] = { alias: p.authorAlias, bulls: 0, country: p.authorCountry || '🏳️' };
         }
-        // Štejemo ZMAGE (1 zmaga = 1 točka na leaderboardu) namesto bull glasov
         if (p.signal_status === 'win' || p.signal_status === 'manual_exit') {
             scores[p.authorAlias].bulls += 1; 
         }
@@ -510,7 +521,6 @@ export default function Home() {
     });
 
     return Object.values(scores)
-      // Filtriramo tiste, ki nimajo nobenih zmag, da ne zasedajo prostora s "0"
       .filter(trader => trader.bulls > 0)
       .sort((a, b) => b.bulls - a.bulls)
       .slice(0, 3);

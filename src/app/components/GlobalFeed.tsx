@@ -339,10 +339,23 @@ export default function GlobalFeed({
                                      <span className="text-[7px] uppercase font-black text-red-500">SL</span>
                                      <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.sl}</span>
                                   </div>
-                                  <div className="flex flex-col">
+                                  <div className="flex flex-col pr-4 border-r border-zinc-700/30">
                                      <span className="text-[7px] uppercase font-black text-green-500">TP</span>
                                      <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.tp}</span>
                                   </div>
+
+                                  {/* DODANA IZSTOPNA CENA (EXIT LOCK) */}
+                                  {isClosed && post.exit_price && (
+                                    <div className="flex flex-col pl-4 border-l border-zinc-700/30 animate-in fade-in duration-1000">
+                                      <span className="text-[7px] uppercase font-black text-blue-400">Exit Lock</span>
+                                      <span className={`text-[11px] font-mono font-black ${
+                                        post.signal_status === 'win' ? 'text-green-500' : 
+                                        post.signal_status === 'loss' ? 'text-red-500' : 'text-blue-500'
+                                      }`}>
+                                        {post.exit_price}
+                                      </span>
+                                    </div>
+                                  )}
 
                                   {/* GUMBI ZA MANUAL CONTROL (Samo za avtorja, če je signal open) */}
                                   {isMe && !isClosed && handleSignalAction && (
