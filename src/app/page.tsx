@@ -108,7 +108,6 @@ export default function Home() {
   }, [activeChat]);
 
   // --- DODANO: STRIPE PROCES NAKUPA ---
-  // --- POSODOBLJEN STRIPE PROCES (Brez redirectToCheckout napake) ---
   const handleStripePurchase = async (amount: number) => {
     try {
       const response = await fetch('/api/checkout', {
@@ -123,7 +122,6 @@ export default function Home() {
 
       const session = await response.json();
 
-      // SPREMEMBA: Uporabimo direkten URL namesto stare Stripe funkcije
       if (session.url) {
         window.location.href = session.url; 
       } else {
@@ -138,24 +136,21 @@ export default function Home() {
   // --- DODANO: Funkcija za avtomatsko dodajanje/odvzemanje kovancev v denarnici ---
   const updateUserBalance = async (userId: string, amount: number) => {
     try {
-      // Preveri trenutno stanje
       const { data: wallet } = await supabase
         .from('user_balances')
         .select('bulls_balance')
         .eq('user_id', userId)
-        .maybeSingle(); // Uporaba maybeSingle namesto single
+        .maybeSingle(); 
       
       const currentBalance = wallet ? wallet.bulls_balance : 0;
       const newBalance = currentBalance + amount;
 
-      // Shrani novo stanje v bazo
       const { error } = await supabase
         .from('user_balances')
         .upsert({ user_id: userId, bulls_balance: newBalance, updated_at: new Date() });
 
       if (error) throw error;
 
-      // Osveži stanje v aplikaciji
       setUserData((prev: any) => ({ ...prev, gains_balance: newBalance }));
       return true;
     } catch (err) {
@@ -186,7 +181,6 @@ export default function Home() {
     expires_at.setHours(expires_at.getHours() + adData.duration);
 
     try {
-      // 1. Odštejemo kovance (bulls_balance v bazi)
       const { error: walletErr } = await supabase
         .from('user_balances')
         .update({ bulls_balance: userData.gains_balance - cost })
@@ -194,7 +188,6 @@ export default function Home() {
 
       if (walletErr) throw walletErr;
 
-      // 2. Vstavimo oglas v tabelo
       const { error: adErr } = await supabase.from('ads').insert([{
         user_id: userData.id,
         text: adData.text,
@@ -218,10 +211,8 @@ export default function Home() {
 
   const fetchPostsFromDB = async () => {
     try {
-      // Pridobimo objave
       const { data: postsData, error: postsError } = await supabase.from('posts_with_profiles').select('*').order('created_at', { ascending: false });
       
-      // SPREMEMBA: Pridobimo odklepe za trenutnega uporabnika SAMO če je prijavljen (reši 400 error)
       let unlockedIds = new Set();
       if (userData?.id) {
          const { data: unlocksData } = await supabase.from('post_unlocks').select('post_id').eq('user_id', userData.id);
@@ -243,8 +234,7 @@ export default function Home() {
           created_at: p.created_at,
           is_premium: p.is_premium || false,
           price_bulls: p.price_bulls || 0,
-          is_unlocked: unlockedIds.has(p.id), // Preverimo če je odklep v bazi
-          // --- DODANO BRANJE NOVIH SIGNAL PODATKOV IZ BAZE ---
+          is_unlocked: unlockedIds.has(p.id), 
           pair: p.pair,
           direction: p.direction,
           entry: p.entry_price,
@@ -259,44 +249,92 @@ export default function Home() {
     }
   };
 
+  // --- DODANO: FUNKCIJA ZA MANUALNO ZAPIRANJE IN BE ---
+  const handleSignalAction = async (postId: string, actionType: 'manual_close' | 'set_be') => {
+    if (!userData.id) return;
+    
+    // Samo preprečimo napačne klike, trejder sam oceni kdaj klikniti.
+    if (!confirm(`Are you sure you want to set this signal to: ${actionType === 'manual_close' ? 'CLOSE NOW' : 'BREAK EVEN'}?`)) return;
+
+    const newStatus = actionType === 'manual_close' ? 'manual_exit' : 'be_void';
+
+    try {
+        const { error } = await supabase
+            .from('posts')
+            .update({ signal_status: newStatus })
+            .eq('id', postId)
+            .eq('user_id', userData.id); // Varnost, da lahko samo avtor to stori
+
+        if (error) throw error;
+        
+        alert(`Signal status updated to ${newStatus.toUpperCase()}`);
+        fetchPostsFromDB(); // Osveži feed, da dobi status in barve
+        fetchAllProfiles(); // Osveži profilno statistiko z novimi izidi
+    } catch (err) {
+        console.error("Error updating signal status:", err);
+        alert("Failed to update signal status.");
+    }
+  };
+
   // --- DODANA FUNKCIJA ZA ODKLEPANJE SIGNALOV ---
   const handleUnlockPost = async (postId: string, price: number) => {
     if (!userData.id) return;
 
     try {
-      // 1. Preverimo če ima uporabnik dovolj GAINS (uporabljamo bulls_balance iz baze)
-      const { data: wallet, error: walletErr } = await supabase
+      const TERMINAL_FEE = 0.20; 
+      const authorShare = Math.floor(price * (1 - TERMINAL_FEE)); 
+      const platformFee = price - authorShare;
+
+      const postToUnlock = posts.find(p => p.id === postId);
+      const authorId = postToUnlock?.user_id;
+      
+      if (!authorId) {
+          alert("Error: Cannot find signal author.");
+          return;
+      }
+
+      const { data: buyerWallet, error: walletErr } = await supabase
         .from('user_balances')
         .select('bulls_balance')
         .eq('user_id', userData.id)
         .maybeSingle();
 
-      if (walletErr || !wallet || wallet.bulls_balance < price) {
+      if (walletErr || !buyerWallet || buyerWallet.bulls_balance < price) {
         alert("Insufficient GAINS! Please top up your wallet.");
         return;
       }
 
-      // 2. Izvedemo transakcijo (odštejemo kupcu)
       const { error: subError } = await supabase
         .from('user_balances')
-        .update({ bulls_balance: wallet.bulls_balance - price })
+        .update({ bulls_balance: buyerWallet.bulls_balance - price })
         .eq('user_id', userData.id);
 
       if (subError) throw subError;
 
-      // 3. Zapišemo odklep v bazo
+      const { data: authorWallet } = await supabase
+        .from('user_balances')
+        .select('earned_balance')
+        .eq('user_id', authorId)
+        .maybeSingle();
+
+      await supabase
+        .from('user_balances')
+        .update({ earned_balance: (authorWallet?.earned_balance || 0) + authorShare })
+        .eq('user_id', authorId);
+
       const { error: unlockError } = await supabase
         .from('post_unlocks')
-        .insert([{ user_id: userData.id, post_id: postId }]);
+        .insert([{ 
+            user_id: userData.id, 
+            post_id: postId,
+            fee_taken: platformFee 
+        }]);
 
       if (unlockError) throw unlockError;
 
-      // 4. Osvežimo podatke
-      alert("Signal Unlocked! Accessing Intel...");
+      alert(`Signal Unlocked! Author received ${authorShare} GAINS.`);
       fetchPostsFromDB();
-      
-      // Posodobimo lokalno stanje denarnice
-      setUserData((prev: any) => ({ ...prev, gains_balance: wallet.bulls_balance - price }));
+      setUserData((prev: any) => ({ ...prev, gains_balance: buyerWallet.bulls_balance - price }));
 
     } catch (err) {
       console.error("Unlock error:", err);
@@ -320,20 +358,19 @@ export default function Home() {
     fetchFollowData();
   };
 
-  // --- POPRAVLJENA NAVIGACIJA NA PROFIL ---
   const handleVisitProfile = (alias: string) => {
-    console.log("Navigating to node:", alias); // Debugging
+    console.log("Navigating to node:", alias); 
     setSearchTerm("");
     setViewingAlias(alias);
     setActiveTab('profile');
     setActiveSubTab('info');
-    fetchAllProfiles(); // Osveži bazo profilov
+    fetchAllProfiles(); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // --- POPRAVLJENO: IZRAČUN STATISTIKE IZ SIGNALOV (NE GLASOV) ---
   const fetchAllProfiles = async () => {
     try {
-      // SPREMEMBA: Pridobivanje "signalnih" statistik namesto MyFxBook statistik
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, alias, country, avatar_url, style, verify_source, earned_balance');
@@ -343,10 +380,11 @@ export default function Home() {
         return;
       } 
       
-      // Za vsak profil moramo izračunati uspeh na podlagi njegovih signalov
+      // Beremo samo tiste objave, ki SO signali (imajo signal_status)
       const { data: postsData, error: postsError } = await supabase
         .from('posts_with_profiles')
-        .select('user_id, bulls, bears');
+        .select('user_id, signal_status')
+        .not('signal_status', 'is', null); // Pridobi samo prave signale
         
       if (postsError) {
          console.error("Error fetching posts for stats:", postsError);
@@ -355,32 +393,36 @@ export default function Home() {
       if (profilesData) {
         const formattedProfiles = profilesData.map((p: any) => {
           
-          // Filtriramo objave trenutnega profila
-          const userPosts = postsData ? postsData.filter((post: any) => post.user_id === p.id) : [];
+          const userSignals = postsData ? postsData.filter((post: any) => post.user_id === p.id) : [];
           
-          let totalBulls = 0;
-          let totalBears = 0;
+          let totalWins = 0;
+          let totalLosses = 0;
           let winRate = 0;
           
-          userPosts.forEach((post: any) => {
-             totalBulls += (post.bulls || 0);
-             totalBears += (post.bears || 0);
+          userSignals.forEach((signal: any) => {
+             // Win so zadeti TP-ji IN ročni profiti
+             if (signal.signal_status === 'win' || signal.signal_status === 'manual_exit') {
+                 totalWins += 1;
+             } 
+             else if (signal.signal_status === 'loss') {
+                 totalLosses += 1;
+             }
+             // 'be_void' in 'open' se preskočita in ne vplivata na Win Rate!
           });
           
-          const totalVotes = totalBulls + totalBears;
+          const totalValidTrades = totalWins + totalLosses;
           
-          if (totalVotes > 0) {
-             winRate = Math.round((totalBulls / totalVotes) * 100);
+          if (totalValidTrades > 0) {
+             winRate = Math.round((totalWins / totalValidTrades) * 100);
           }
           
-          // Tukaj nadomestimo MyFxBook podatke s podatki o signalih
           return {
             ...p,
             avatar: p.avatar_url,
-            total_gain: totalBulls, // Uporabimo "gain" kot število zbranih Bullsov
-            max_drawdown: totalBears, // Uporabimo "drawdown" kot število zbranih Bearsov
-            win_rate: winRate, // Dejanski win rate glede na glasove
-            myfxbook_url: '' // Odstranjeno
+            total_gain: totalWins,       // Sedaj kaže število pravih ZMAG
+            max_drawdown: totalLosses,   // Sedaj kaže število pravih PORAZOV
+            win_rate: winRate,           // % izračunan na podlagi pravih trejdov
+            myfxbook_url: '' 
           };
         });
         
@@ -428,7 +470,6 @@ export default function Home() {
       const API_KEY = 'd6cr7fpr01qgk7mjg2egd6cr7fpr01qgk7mjg2f0'; 
       const res = await fetch(`https://finnhub.io/api/v1/calendar/economic?token=${API_KEY}`);
       
-      // Dodana varovalka za 403 Forbidden
       if (!res.ok) {
          throw new Error(`API returned status: ${res.status}`);
       }
@@ -444,11 +485,11 @@ export default function Home() {
         setMarketRisk(highImpact.length > 0 ? 'high' : 'low');
       }
     } catch (e) {
-      // Tiho zadušimo napako, da ne straši v konzoli
       console.log("News API unavailable (Free Tier).");
     }
   };
 
+  // --- POPRAVLJENO: LEADERBOARD BERE PRAVE ZMAGE IN NE VEČ GLASOV ---
   const getDailyTopTraders = () => {
     const scores: { [key: string]: { alias: string, bulls: number, country: string } } = {};
     const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -456,15 +497,21 @@ export default function Home() {
     if (!Array.isArray(posts)) return [];
 
     posts.forEach(p => {
+      // Gledamo samo signale v zadnjih 24h, ki so označeni kot 'win' ali 'manual_exit'
       if (p.created_at && new Date(p.created_at).getTime() > twentyFourHoursAgo) {
         if (!scores[p.authorAlias]) {
           scores[p.authorAlias] = { alias: p.authorAlias, bulls: 0, country: p.authorCountry || '🏳️' };
         }
-        scores[p.authorAlias].bulls += (p.bulls || 0);
+        // Štejemo ZMAGE (1 zmaga = 1 točka na leaderboardu) namesto bull glasov
+        if (p.signal_status === 'win' || p.signal_status === 'manual_exit') {
+            scores[p.authorAlias].bulls += 1; 
+        }
       }
     });
 
     return Object.values(scores)
+      // Filtriramo tiste, ki nimajo nobenih zmag, da ne zasedajo prostora s "0"
+      .filter(trader => trader.bulls > 0)
       .sort((a, b) => b.bulls - a.bulls)
       .slice(0, 3);
   };
@@ -494,7 +541,6 @@ export default function Home() {
     }
   };
 
-  // --- POPRAVEK: AVTOMATSKO POSODABLJANJE ŠTEVCA FOLLOWERJEV ---
   useEffect(() => {
     if (userData.id) {
       fetchFollowData();
@@ -530,10 +576,6 @@ export default function Home() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // SPREMEMBA: Odstranili smo zunanje API klice za MyFxBook, MQL5, in FTMO.
-      // Profil sedaj posodablja le ročno vnesene podatke in osnovne nastavitve.
-      // Ohranili smo spremenljivke, da preprečimo napake v ostalih komponentah.
-
       const updates: any = {
         id: user.id,
         alias: userData.alias,
@@ -542,7 +584,7 @@ export default function Home() {
         country: userData.country,
         style: userData.style,
         market: userData.market,
-        verify_source: 'manual', // Prisilimo ročno, saj ni več zunanjih orodij
+        verify_source: 'manual', 
         updated_at: new Date()
       };
 
@@ -561,7 +603,6 @@ export default function Home() {
             avatar: updates.avatar_url 
         }));
         
-        // Osvežimo statistiko, ki se izračuna na podlagi signalov
         fetchAllProfiles(); 
       }
     } catch (error) {
@@ -603,7 +644,6 @@ export default function Home() {
       await supabase.from('posts').update(updates).eq('id', postId);
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
       
-      // SPREMEMBA: Po glasovanju osvežimo profile, saj se na podlagi glasov preračuna win rate in profit
       fetchAllProfiles(); 
     } catch (err) {
       console.error("Voting error:", err);
@@ -620,7 +660,6 @@ export default function Home() {
         alert("Error deleting: " + error.message);
       } else {
         fetchPostsFromDB();
-        // Osvežimo statistiko
         fetchAllProfiles();
       }
     } catch (err) {
@@ -628,9 +667,7 @@ export default function Home() {
     }
   };
 
-  // --- POPRAVLJENO: SPREJEMANJE SIGNAL PODATKOV IZ FEEDVIEW ---
   const handleAddPost = async (signalData?: any) => {
-    // Če ni navadnega teksta, ne slike, in ni podatkov o signalu -> zavrni
     if (!newPost.trim() && !selectedImage && !signalData) {
         alert("Write something, upload intel, or fill out the signal details.");
         return;
@@ -654,7 +691,6 @@ export default function Home() {
         finalImageUrl = urlData.publicUrl;
       }
 
-      // Združimo osnovne podatke z morebitnimi "Signal" podatki
       const newPostData = {
         text: newPost,
         image_url: finalImageUrl,
@@ -663,13 +699,12 @@ export default function Home() {
         user_id: user.id,
         is_premium: isPremium,
         price_bulls: isPremium ? priceBulls : 0,
-        // Dodamo signalne podatke (če obstajajo) v ustrezne stolpce
         pair: signalData?.pair || null,
         direction: signalData?.direction || null,
         entry_price: signalData?.entry || null,
         sl_price: signalData?.sl || null,
         tp_price: signalData?.tp || null,
-        signal_status: signalData ? 'open' : null // Ob objavi je signal odprt
+        signal_status: signalData ? 'open' : null 
       };
 
       const { error } = await supabase.from('posts').insert([newPostData]).select();
@@ -786,7 +821,6 @@ export default function Home() {
     setActiveTab('feed');
   };
 
-  // --- REAL-TIME SPOROČILA & OBVESTILA ---
   useEffect(() => {
     if (!userData.alias) return;
 
@@ -803,7 +837,6 @@ export default function Home() {
     };
     fetchMessages();
 
-    // VZPOSTAVITEV REAL-TIME KANALA
     const channel = supabase
       .channel('ticker_talker_live') 
       .on('postgres_changes', { 
@@ -825,10 +858,8 @@ export default function Home() {
           }
         } 
         
-        // POSODOBITEV: Sinhronizacija stanja prebranih sporočil
         if (payload.eventType === 'UPDATE') {
           const updated = payload.new;
-          // BLOKADA: Če prejemamo update za chat, ki ga pravkar gledamo, in pravi da je "is_read: false", ga ignoriramo
           if (updated.from_alias === activeChatRef.current && updated.to_alias === userData.alias && !updated.is_read) {
               return;
           }
@@ -841,7 +872,6 @@ export default function Home() {
         table: 'posts' 
       }, () => {
         fetchPostsFromDB();
-        // Osvežimo statistiko profilov ob novih objavah/glasovih
         fetchAllProfiles(); 
       })
       .subscribe();
@@ -849,14 +879,11 @@ export default function Home() {
     return () => { supabase.removeChannel(channel); };
   }, [userData.alias]); 
 
-  // --- POPRAVEK: EKSPLICITNO OZNAČEVANJE PREBRANIH SPOROČIL ---
   useEffect(() => {
     const markAsRead = async () => {
       if (activeChat && userData.alias) {
-        // 1. Takoj lokalno skrijemo glavno obvestilo
         setHasNewMessage(false);
 
-        // 2. Takoj posodobimo bazo
         await supabase
           .from('messages')
           .update({ is_read: true })
@@ -864,7 +891,6 @@ export default function Home() {
           .eq('to_alias', userData.alias)
           .eq('is_read', false);
 
-        // 3. Lokalno posodobimo seznam sporočil, da UI takoj reagira
         setMessages(currentMessages => 
           currentMessages.map(m => 
             (m.from_alias === activeChat && m.to_alias === userData.alias) 
@@ -884,7 +910,7 @@ export default function Home() {
     fetchPostsFromDB(); 
     fetchEconomicCalendar();
     fetchAllProfiles(); 
-    fetchAds(); // DODANO: Pridobivanje oglasov ob zagonu
+    fetchAds(); 
 
     const checkUser = async () => {
       try {
@@ -896,10 +922,9 @@ export default function Home() {
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .maybeSingle(); // Dodano maybeSingle tu za vsak slučaj
+          .maybeSingle(); 
 
         if (profileData) {
-          // SPREMEMBA: Uporaba maybeSingle, da ne meče 406 napake
           const { data: balanceData } = await supabase.from('user_balances').select('bulls_balance').eq('user_id', session.user.id).maybeSingle();
 
           setUserData((prev: any) => ({
@@ -936,10 +961,8 @@ export default function Home() {
     };
     checkUser();
 
-    // --- POSODOBLJENO: VARNI SERVER-SIDE API (10 MIN OSVEŽITEV) ---
     const fetchTwelveDataPrices = async () => {
       try {
-        // Kličeva NAŠ strežnik, da varujeva kredite
         const res = await fetch('/api/prices');
         const data = await res.json();
         
@@ -973,7 +996,6 @@ export default function Home() {
     };
 
     fetchTwelveDataPrices();
-    // 600.000 ms = 10 minut za varno porabo kreditov
     const priceInterval = setInterval(fetchTwelveDataPrices, 600000); 
     const newsInterval = setInterval(fetchEconomicCalendar, 3600000);
 
@@ -1392,7 +1414,7 @@ export default function Home() {
                                 {trader.alias}
                               </span>
                               <span className={`text-[10px] font-mono font-black ${darkMode ? 'text-orange-400' : 'text-orange-600'}`}>
-                                +{trader.bulls}
+                                +{trader.bulls} WINS
                               </span>
                             </div>
                           </div>
@@ -1410,6 +1432,7 @@ export default function Home() {
                       onVisitProfile={handleVisitProfile}
                       handleDeletePost={handleDeletePost}
                       handleUnlock={handleUnlockPost} 
+                      handleSignalAction={handleSignalAction}
                     />
                   </div>
 
@@ -1473,6 +1496,7 @@ export default function Home() {
                         setIsPremium={setIsPremium}
                         priceBulls={priceBulls}
                         setPriceBulls={setPriceBulls}
+                        handleSignalAction={handleSignalAction}
                       />
                     ) : activeSubTab === 'journal' ? ( 
                       <TradingJournal 

@@ -10,7 +10,8 @@ interface GlobalFeedProps {
   darkMode: boolean; 
   onVisitProfile: (alias: string) => void;
   handleDeletePost: (id: string) => void;
-  handleUnlock?: (id: string, price: number) => void; // DODANO: Funkcija za odklep
+  handleUnlock?: (id: string, price: number) => void; 
+  handleSignalAction?: (id: string, actionType: 'manual_close' | 'set_be') => void; // DODANO ZA MANUAL CONTROL
 }
 
 export default function GlobalFeed({ 
@@ -21,7 +22,8 @@ export default function GlobalFeed({
   darkMode,
   onVisitProfile,
   handleDeletePost,
-  handleUnlock // DODANO
+  handleUnlock,
+  handleSignalAction // DODANO
 }: GlobalFeedProps) {
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [lastPostId, setLastPostId] = useState<number | null>(null);
@@ -81,13 +83,17 @@ export default function GlobalFeed({
 
   const handleUserClick = (e: React.MouseEvent, alias: string) => {
     e.preventDefault();
-    e.stopPropagation(); // Ključno: prepreči, da bi klik zaznalo karkoli pod gumbom
+    e.stopPropagation(); 
     if (alias && onVisitProfile) {
       onVisitProfile(alias);
     }
   };
 
-  const handleVoteClick = (postId: any, voteType: 'bull' | 'bear') => {
+  const handleVoteClick = (postId: any, voteType: 'bull' | 'bear', isClosed: boolean) => {
+    if (isClosed) {
+      alert("This signal is already closed. Voting is disabled.");
+      return;
+    }
     handleVote(postId, voteType);
   };
 
@@ -132,9 +138,10 @@ export default function GlobalFeed({
             // --- PREMIUM LOGIKA ---
             const showBlur = post.is_premium && !isMe && !post.is_unlocked;
 
-            // --- LOGIKA ZA PAMETNO PIKO ---
+            // --- SIGNAL STATUS LOGIKA ---
             const postTime = post.created_at ? new Date(post.created_at).getTime() : 0;
             const isActive = Date.now() - postTime < 3600000; 
+            const isClosed = post.signal_status && post.signal_status !== 'open';
 
             return (
               <div 
@@ -143,7 +150,7 @@ export default function GlobalFeed({
                   isNew 
                     ? (darkMode ? 'bg-blue-500/10 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.2)]' : 'bg-blue-50 border-blue-200 shadow-lg scale-[1.01]')
                     : (darkMode ? 'bg-zinc-900/10 border-zinc-800/40 hover:border-blue-500/30' : 'bg-white border-zinc-100 shadow-sm hover:shadow-md')
-                } backdrop-blur-md overflow-hidden`}
+                } backdrop-blur-md overflow-hidden ${isClosed ? 'opacity-80' : ''}`}
               >
                  {isMyPost && (
                    <button 
@@ -160,7 +167,7 @@ export default function GlobalFeed({
                    </button>
                  )}
 
-                 <div className="flex flex-col md:flex-row gap-4 md:gap-5">
+                 <div className="flex flex-col md:flex-row gap-4 md:gap-5 relative z-10">
                    
                    {post.image && !showBlur && (
                      <div 
@@ -172,12 +179,14 @@ export default function GlobalFeed({
                        <img 
                          src={post.image} 
                          alt="Market Intel" 
-                         className="w-full h-full object-cover opacity-90 group-hover/img:opacity-100 transition-all duration-700" 
+                         className={`w-full h-full object-cover transition-all duration-700 ${isClosed ? 'grayscale opacity-50' : 'opacity-90 group-hover/img:opacity-100'}`} 
                        />
-                       <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/10">
-                          <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
-                          <span className="text-[6px] text-white font-black uppercase tracking-tighter">Live Intel</span>
-                       </div>
+                       {!isClosed && (
+                           <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/10">
+                              <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
+                              <span className="text-[6px] text-white font-black uppercase tracking-tighter">Live Intel</span>
+                           </div>
+                       )}
                      </div>
                    )}
 
@@ -226,7 +235,7 @@ export default function GlobalFeed({
                                   {post.authorAlias || "Anonymous"} 
                                 </span>
                                 
-                                {isActive ? (
+                                {isActive && !isClosed ? (
                                   <div className="relative flex h-1.5 w-1.5 items-center justify-center">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
@@ -291,9 +300,27 @@ export default function GlobalFeed({
                           </div>
                         ) : (
                           <div>
+                            {/* STATUS ŽIG (ČE JE ZAPRTO) */}
+                            {isClosed && (
+                                <div className={`my-2 py-1 px-3 rounded text-[9px] font-black uppercase tracking-[0.2em] inline-block ${
+                                    post.signal_status === 'win' ? 'bg-green-500/20 text-green-500 border border-green-500/50' :
+                                    post.signal_status === 'loss' ? 'bg-red-500/20 text-red-500 border border-red-500/50' :
+                                    post.signal_status === 'manual_exit' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/50' :
+                                    'bg-zinc-500/20 text-zinc-400 border border-zinc-500/50'
+                                }`}>
+                                    {post.signal_status === 'win' ? '🎯 TARGET HIT (WIN)' :
+                                     post.signal_status === 'loss' ? '🛑 STOPPED OUT (LOSS)' :
+                                     post.signal_status === 'manual_exit' ? '✋ MANUAL CLOSE' :
+                                     '🛡️ BREAK EVEN (VOID)'}
+                                </div>
+                            )}
+
                             {/* PRIKAZ SIGNALA ZA GLOBAL FEED */}
                             {post.pair && (
-                               <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border ${darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                               <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border relative overflow-hidden ${
+                                   isClosed ? (darkMode ? 'bg-black/50 border-zinc-900' : 'bg-zinc-100 border-zinc-300 opacity-70') : 
+                                   (darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200')
+                               }`}>
                                   <div className="flex flex-col pr-4 border-r border-zinc-700/30">
                                      <span className="text-[7px] uppercase font-black text-zinc-500">Pair</span>
                                      <span className={`text-[11px] font-black font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.pair}</span>
@@ -316,6 +343,26 @@ export default function GlobalFeed({
                                      <span className="text-[7px] uppercase font-black text-green-500">TP</span>
                                      <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.tp}</span>
                                   </div>
+
+                                  {/* GUMBI ZA MANUAL CONTROL (Samo za avtorja, če je signal open) */}
+                                  {isMe && !isClosed && handleSignalAction && (
+                                    <div className="w-full mt-3 pt-3 border-t border-zinc-700/30 flex gap-2">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleSignalAction(post.id, 'manual_close'); }}
+                                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[8px] font-black uppercase tracking-widest transition-all"
+                                        >
+                                            🛑 Close Now
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleSignalAction(post.id, 'set_be'); }}
+                                            className={`px-3 py-1.5 border rounded text-[8px] font-black uppercase tracking-widest transition-all ${
+                                                darkMode ? 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500' : 'border-zinc-300 text-zinc-600 hover:text-black hover:border-zinc-400'
+                                            }`}
+                                        >
+                                            🛡️ Set B.E.
+                                        </button>
+                                    </div>
+                                  )}
                                </div>
                             )}
                             <p className={`text-xs md:text-[13px] font-medium leading-relaxed tracking-tight mb-4 break-words ${
@@ -331,27 +378,27 @@ export default function GlobalFeed({
                         <>
                           <div className="flex flex-wrap items-center gap-2 md:gap-3">
                             <button 
-                              onClick={() => handleVoteClick(post.id, 'bull')}
+                              onClick={() => handleVoteClick(post.id, 'bull', isClosed)}
                               className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-4 py-3 md:py-1.5 rounded-xl border transition-all active:scale-90 ${
-                                darkMode 
-                                    ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-green-500' 
-                                    : 'bg-white border-zinc-200 text-zinc-600 hover:text-green-600'
+                                isClosed 
+                                    ? (darkMode ? 'bg-zinc-900/50 border-zinc-800/50 text-zinc-700 cursor-not-allowed' : 'bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed')
+                                    : (darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-green-500' : 'bg-white border-zinc-200 text-zinc-600 hover:text-green-600')
                               }`}
                             >
                               <span className="text-[9px] font-black uppercase tracking-tighter">Bullish</span>
-                              <span className="text-[10px] font-mono font-bold text-green-500">{post.bulls || 0}</span>
+                              <span className={`text-[10px] font-mono font-bold ${isClosed ? 'opacity-50' : 'text-green-500'}`}>{post.bulls || 0}</span>
                             </button>
                             
                             <button 
-                              onClick={() => handleVoteClick(post.id, 'bear')}
+                              onClick={() => handleVoteClick(post.id, 'bear', isClosed)}
                               className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-4 py-3 md:py-1.5 rounded-xl border transition-all active:scale-90 ${
-                                darkMode 
-                                    ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-red-500' 
-                                    : 'bg-white border-zinc-200 text-zinc-600 hover:text-green-600'
+                                isClosed 
+                                    ? (darkMode ? 'bg-zinc-900/50 border-zinc-800/50 text-zinc-700 cursor-not-allowed' : 'bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed')
+                                    : (darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-red-500' : 'bg-white border-zinc-200 text-zinc-600 hover:text-red-600')
                               }`}
                             >
                               <span className="text-[9px] font-black uppercase tracking-tighter">Bearish</span>
-                              <span className="text-[10px] font-mono font-bold text-red-500">{post.bears || 0}</span>
+                              <span className={`text-[10px] font-mono font-bold ${isClosed ? 'opacity-50' : 'text-red-500'}`}>{post.bears || 0}</span>
                             </button>
 
                             <button 
@@ -434,7 +481,16 @@ export default function GlobalFeed({
                    </div>
                  </div>
 
-                 <div className={`absolute top-0 right-0 w-8 h-8 border-t border-r rounded-tr-[2rem] transition-opacity duration-500 ${
+                 {/* BACKGROUND ŽIG ZA ZAPRTE SIGNALE (Vodeni žig v ozadju) */}
+                 {isClosed && (
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-5 overflow-hidden z-0">
+                        <span className="text-9xl font-black rotate-[-20deg] uppercase tracking-tighter whitespace-nowrap">
+                            {post.signal_status.replace('_', ' ')}
+                        </span>
+                    </div>
+                 )}
+
+                 <div className={`absolute top-0 right-0 w-8 h-8 border-t border-r rounded-tr-[2rem] transition-opacity duration-500 z-10 ${
                     isNew ? 'opacity-100 border-blue-500' : 'opacity-0 group-hover:opacity-100 border-blue-500/20'
                  }`} />
               </div>

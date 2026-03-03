@@ -5,7 +5,6 @@ interface FeedViewProps {
   userData: any;
   posts: any[];
   onBack: () => void;
-  // POPRAVEK: Omogočimo, da gumb pošlje podatke o signalu naprej
   handleAddPost: (signalData?: any) => void; 
   newPost: string;
   setNewPost: (val: string) => void;
@@ -20,6 +19,7 @@ interface FeedViewProps {
   setIsPremium?: (val: boolean) => void;
   priceBulls?: number;
   setPriceBulls?: (val: number) => void;
+  handleSignalAction?: (id: string, actionType: 'manual_close' | 'set_be') => void; // DODANO ZA MANUAL CONTROL
 }
 
 export default function FeedView({ 
@@ -39,7 +39,8 @@ export default function FeedView({
   isPremium = false,
   setIsPremium,
   priceBulls = 5,
-  setPriceBulls
+  setPriceBulls,
+  handleSignalAction // DODANO
 }: FeedViewProps) {
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -77,9 +78,20 @@ export default function FeedView({
         sl: parseFloat(signalSL),
         tp: parseFloat(signalTP)
       });
+      // Počisti po objavi
+      setSignalPair(""); setSignalEntry(""); setSignalSL(""); setSignalTP("");
+      setIsSignalMode(false);
     } else {
       handleAddPost(); // Navadna objava
     }
+  };
+
+  const handleVoteClick = (postId: any, voteType: 'bull' | 'bear', isClosed: boolean) => {
+    if (isClosed) {
+      alert("This signal is already closed. Voting is disabled.");
+      return;
+    }
+    handleVote(postId, voteType);
   };
 
   return (
@@ -323,13 +335,14 @@ export default function FeedView({
         <div className="grid grid-cols-1 gap-4 pb-10">
           {filteredPosts.map((post, idx) => {
             const showBlur = !isOwnProfile && post.is_premium && !post.is_unlocked;
+            const isClosed = post.signal_status && post.signal_status !== 'open';
 
             return (
               <div key={post.id || idx} className={`group p-5 border rounded-[2rem] transition-all duration-300 relative overflow-hidden ${
                 darkMode 
                   ? 'bg-zinc-900/10 border-zinc-800/30 hover:border-blue-500/20' 
                   : 'bg-white border-zinc-200 hover:shadow-md'
-              }`}>
+              } ${isClosed ? 'opacity-80' : ''}`}>
                 
                 {isOwnProfile && (
                   <button 
@@ -347,20 +360,20 @@ export default function FeedView({
                   </button>
                 )}
 
-                <div className="flex flex-col md:flex-row gap-5">
+                <div className="flex flex-col md:flex-row gap-5 relative z-10">
                   {post.image && !showBlur && (
                     <div 
                       onClick={(e) => { e.stopPropagation(); setZoomImage(post.image); }}
-                      className={`shrink-0 w-full md:w-40 h-48 md:h-40 rounded-2xl overflow-hidden border cursor-zoom-in ${
+                      className={`shrink-0 w-full md:w-40 h-48 md:h-40 rounded-[1.5rem] overflow-hidden border cursor-zoom-in ${
                         darkMode ? 'border-zinc-800' : 'border-zinc-100'
                       }`}
                     >
-                      <img src={post.image} alt="Signal" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                      <img src={post.image} alt="Signal" className={`w-full h-full object-cover transition-transform duration-700 ${isClosed ? 'grayscale opacity-50' : 'group-hover:scale-105'}`} />
                     </div>
                   )}
 
                   {post.image && showBlur && (
-                    <div className={`shrink-0 w-full md:w-40 h-48 md:h-40 rounded-2xl overflow-hidden border relative ${
+                    <div className={`shrink-0 w-full md:w-40 h-48 md:h-40 rounded-[1.5rem] overflow-hidden border relative ${
                       darkMode ? 'border-zinc-800 bg-black/20' : 'border-zinc-100 bg-zinc-50'
                     }`}>
                        <img src={post.image} alt="Locked" className="w-full h-full object-cover opacity-20 blur-xl pointer-events-none select-none" />
@@ -404,9 +417,27 @@ export default function FeedView({
                           </div>
                       ) : (
                         <div>
+                          {/* STATUS ŽIG (ČE JE ZAPRTO) */}
+                          {isClosed && (
+                              <div className={`my-2 py-1 px-3 rounded text-[9px] font-black uppercase tracking-[0.2em] inline-block ${
+                                  post.signal_status === 'win' ? 'bg-green-500/20 text-green-500 border border-green-500/50' :
+                                  post.signal_status === 'loss' ? 'bg-red-500/20 text-red-500 border border-red-500/50' :
+                                  post.signal_status === 'manual_exit' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/50' :
+                                  'bg-zinc-500/20 text-zinc-400 border border-zinc-500/50'
+                              }`}>
+                                  {post.signal_status === 'win' ? '🎯 TARGET HIT (WIN)' :
+                                   post.signal_status === 'loss' ? '🛑 STOPPED OUT (LOSS)' :
+                                   post.signal_status === 'manual_exit' ? '✋ MANUAL CLOSE' :
+                                   '🛡️ BREAK EVEN (VOID)'}
+                              </div>
+                          )}
+
                           {/* PRIKAZ SIGNALA, ČE JE BIL OBJAVLEN KOT SIGNAL */}
                           {post.pair && (
-                             <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border ${darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                             <div className={`mt-2 mb-4 flex flex-wrap gap-2 p-3 rounded-xl border ${
+                                 isClosed ? (darkMode ? 'bg-black/50 border-zinc-900' : 'bg-zinc-100 border-zinc-300 opacity-70') : 
+                                 (darkMode ? 'bg-black/30 border-zinc-800' : 'bg-zinc-50 border-zinc-200')
+                             }`}>
                                 <div className="flex flex-col pr-4 border-r border-zinc-700/30">
                                    <span className="text-[7px] uppercase font-black text-zinc-500">Pair</span>
                                    <span className={`text-[11px] font-black font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.pair}</span>
@@ -429,6 +460,26 @@ export default function FeedView({
                                    <span className="text-[7px] uppercase font-black text-green-500">TP</span>
                                    <span className={`text-[11px] font-mono ${darkMode ? 'text-white' : 'text-black'}`}>{post.tp}</span>
                                 </div>
+
+                                {/* GUMBI ZA MANUAL CONTROL */}
+                                {isOwnProfile && !isClosed && handleSignalAction && (
+                                  <div className="w-full mt-3 pt-3 border-t border-zinc-700/30 flex gap-2">
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); handleSignalAction(post.id, 'manual_close'); }}
+                                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[8px] font-black uppercase tracking-widest transition-all"
+                                      >
+                                          🛑 Close Now
+                                      </button>
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); handleSignalAction(post.id, 'set_be'); }}
+                                          className={`px-3 py-1.5 border rounded text-[8px] font-black uppercase tracking-widest transition-all ${
+                                              darkMode ? 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500' : 'border-zinc-300 text-zinc-600 hover:text-black hover:border-zinc-400'
+                                          }`}
+                                      >
+                                          🛡️ Set B.E.
+                                      </button>
+                                  </div>
+                                )}
                              </div>
                           )}
                           <p className={`text-sm md:text-base font-light leading-relaxed italic break-words ${darkMode ? 'text-zinc-300' : 'text-zinc-800'}`}>
@@ -441,17 +492,21 @@ export default function FeedView({
                     {!showBlur && (
                       <div className="flex items-center gap-2 mt-6">
                         <button 
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleVote(post.id, 'bull'); }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleVoteClick(post.id, 'bull', isClosed); }}
                           className={`flex-1 md:flex-none py-2 px-6 rounded-xl border text-[9px] font-black transition-all ${
-                            darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-green-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400 hover:text-green-600'
+                            isClosed 
+                                ? (darkMode ? 'bg-zinc-900/50 border-zinc-800/50 text-zinc-700 cursor-not-allowed' : 'bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed')
+                                : (darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-green-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400 hover:text-green-600')
                           }`}
                         >
                           BULLISH {post.bulls > 0 && `// ${post.bulls}`}
                         </button>
                         <button 
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleVote(post.id, 'bear'); }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleVoteClick(post.id, 'bear', isClosed); }}
                           className={`flex-1 md:flex-none py-2 px-6 rounded-xl border text-[9px] font-black transition-all ${
-                            darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-red-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400 hover:text-red-600'
+                            isClosed 
+                                ? (darkMode ? 'bg-zinc-900/50 border-zinc-800/50 text-zinc-700 cursor-not-allowed' : 'bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed')
+                                : (darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-red-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400 hover:text-red-600')
                           }`}
                         >
                           BEARISH {post.bears > 0 && `// ${post.bears}`}
@@ -460,6 +515,15 @@ export default function FeedView({
                     )}
                   </div>
                 </div>
+
+                {/* BACKGROUND ŽIG ZA ZAPRTE SIGNALE (Vodeni žig v ozadju) */}
+                {isClosed && (
+                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-5 overflow-hidden z-0">
+                       <span className="text-9xl font-black rotate-[-20deg] uppercase tracking-tighter whitespace-nowrap">
+                           {post.signal_status.replace('_', ' ')}
+                       </span>
+                   </div>
+                )}
               </div>
             );
           })}
