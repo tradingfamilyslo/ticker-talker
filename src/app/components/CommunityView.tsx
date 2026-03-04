@@ -18,6 +18,11 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingMsgText, setEditingMsgText] = useState("");
 
+  // NOVO: State za urejanje stila (Gradient Picker)
+  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [tempColorA, setTempColorA] = useState("#1a1a1a");
+  const [tempColorB, setTempColorB] = useState("#000000");
+
   // State za ustvarjanje novih stvari
   const [showAddCat, setShowAddCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -59,7 +64,10 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
       }));
       setCategories(combined);
       if (!activeChannel && combined[0]?.channels[0]) {
-        setActiveChannel(combined[0].channels[0]);
+        const firstChan = combined[0].channels[0];
+        setActiveChannel(firstChan);
+        setTempColorA(firstChan.bg_color || "#1a1a1a");
+        setTempColorB(firstChan.bg_image_url || "#000000");
       }
     }
   };
@@ -153,7 +161,9 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
           category_id: catId, 
           owner_id: userData.id,
           is_premium: newChanIsPremium,
-          logo_url: finalLogoUrl // Shranimo URL slike
+          logo_url: finalLogoUrl, // Shranimo URL slike
+          bg_color: "#1a1a1a",
+          bg_image_url: "#000000"
         }
       ]);
       
@@ -218,21 +228,18 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     }
   };
 
-  // DODANO: Funkcija za posodobitev stila kanala
+  // NOVO: Funkcija za posodobitev stila kanala (Gradient)
   const handleUpdateStyle = async () => {
     if (!activeChannel || !isOwnProfile) return;
-    const color = prompt("Enter HEX color for background (e.g. #1a1a1a) or leave empty:", activeChannel.bg_color || "");
-    const img = prompt("Enter URL for background image or leave empty:", activeChannel.bg_image_url || "");
-    
     const { error } = await supabase.from('community_channels')
-      .update({ bg_color: color, bg_image_url: img })
+      .update({ bg_color: tempColorA, bg_image_url: tempColorB })
       .eq('id', activeChannel.id);
     
     if (!error) {
-      alert("Style updated! Refreshing...");
+      alert("Style locked! 🎨");
       fetchHubData();
-      // Posodobimo lokalni state aktivnega kanala
-      setActiveChannel({...activeChannel, bg_color: color, bg_image_url: img});
+      setActiveChannel({...activeChannel, bg_color: tempColorA, bg_image_url: tempColorB});
+      setShowStylePicker(false);
     }
   };
 
@@ -448,7 +455,11 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 {cat.channels.map((chan: any) => (
                   <div key={chan.id} className="group/chan flex items-center gap-1">
                     <button
-                      onClick={() => setActiveChannel(chan)}
+                      onClick={() => {
+                        setActiveChannel(chan);
+                        setTempColorA(chan.bg_color || "#1a1a1a");
+                        setTempColorB(chan.bg_image_url || "#000000");
+                      }}
                       className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all ${
                         activeChannel?.id === chan.id 
                           ? (darkMode ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-lg' : 'bg-blue-50 text-blue-600 border border-blue-200 shadow-md')
@@ -475,22 +486,19 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
         </div>
       </div>
 
-      {/* DESNA STRAN: CHAT AREA */}
+      {/* DESNA STRAN: CHAT AREA S PRELIVOM */}
       <div 
-        className="flex-1 flex flex-col relative"
+        className="flex-1 flex flex-col relative transition-all duration-700"
         style={{ 
-          backgroundColor: activeChannel?.bg_color || (darkMode ? 'transparent' : '#ffffff'),
-          backgroundImage: activeChannel?.bg_image_url ? `url(${activeChannel.bg_image_url})` : 'none',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
+          background: `linear-gradient(180deg, ${activeChannel?.bg_color || '#1a1a1a'} 0%, ${activeChannel?.bg_image_url || '#000000'} 100%)` 
         }}
       >
-        {/* Overlay za boljšo berljivost ob sliki ozadja */}
-        {activeChannel?.bg_image_url && <div className="absolute inset-0 bg-black/40 pointer-events-none" />}
+        {/* Overlay za boljšo berljivost */}
+        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
         {activeChannel ? (
           <div className="relative z-10 flex flex-col h-full">
-            <div className="p-6 border-b flex justify-between items-center backdrop-blur-md bg-black/10">
+            <div className="p-6 border-b flex justify-between items-center backdrop-blur-md bg-black/20">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-3">
                   {activeChannel.logo_url && (
@@ -512,15 +520,33 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
 
               <div className="flex gap-2">
                 {isOwnProfile && (
-                  <button 
-                    onClick={handleUpdateStyle}
-                    className="text-[9px] font-black uppercase border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 bg-black/20 hover:bg-blue-500/10 transition-all"
-                  >
-                    🎨 Style
-                  </button>
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowStylePicker(!showStylePicker)}
+                      className="text-[9px] font-black uppercase border border-white/20 px-3 py-2 rounded-lg text-white bg-white/5 hover:bg-white/10 transition-all"
+                    >
+                      🎨 Gradient
+                    </button>
+                    {showStylePicker && (
+                      <div className="absolute right-0 mt-2 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-[100] w-48 animate-in zoom-in-95">
+                        <p className="text-[8px] font-black uppercase text-zinc-500 mb-3 text-center">Customize Hub</p>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[8px] uppercase font-bold text-white">Top</span>
+                            <input type="color" value={tempColorA} onChange={(e) => setTempColorA(e.target.value)} className="w-8 h-8 rounded cursor-pointer bg-transparent border-none" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[8px] uppercase font-bold text-white">Bottom</span>
+                            <input type="color" value={tempColorB} onChange={(e) => setTempColorB(e.target.value)} className="w-8 h-8 rounded cursor-pointer bg-transparent border-none" />
+                          </div>
+                          <button onClick={handleUpdateStyle} className="w-full py-2 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase mt-2 hover:bg-blue-500 transition-all">Apply Gradient</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
                 {isOwnProfile && activeChannel.is_premium && (
-                  <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500 transition-all">
+                  <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500 shadow-lg">
                     Invite Member
                   </button>
                 )}
@@ -556,7 +582,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           </div>
                         </div>
                       ) : (
-                        <div className={`p-3 rounded-2xl text-[11px] shadow-lg flex flex-col gap-2 backdrop-blur-[2px] ${m.author_id === userData.id ? 'bg-blue-600/90 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-white/90 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
+                        <div className={`p-3 rounded-2xl text-[11px] shadow-lg flex flex-col gap-2 backdrop-blur-[2px] ${m.author_id === userData.id ? 'bg-blue-600/90 text-white rounded-tr-none' : 'bg-black/40 border border-white/10 text-white rounded-tl-none backdrop-blur-sm'}`}>
                           {m.file_url && (
                             <a href={m.file_url} target="_blank" rel="noreferrer" className="max-w-xs overflow-hidden rounded-lg">
                                <img src={m.file_url} className="w-full h-auto hover:scale-105 transition-transform" alt="attached" />
@@ -570,7 +596,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                   <div ref={messagesEndRef} />
                 </div>
                 
-                <div className="p-6 border-t mt-auto backdrop-blur-md bg-black/5">
+                <div className="p-6 border-t mt-auto backdrop-blur-md bg-black/10">
                   <div className="flex items-center gap-2 p-2 rounded-2xl border border-white/10 bg-black/20">
                     <label className={`p-2 rounded-xl cursor-pointer hover:bg-white/5 transition-all ${uploadingFile ? 'animate-pulse opacity-50' : ''}`}>
                        <span className="text-lg">📎</span>
