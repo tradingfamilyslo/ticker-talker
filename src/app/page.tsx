@@ -10,9 +10,9 @@ import FeedView from './components/FeedView';
 import GlobalFeed from './components/GlobalFeed';
 import AnalogClock from './components/AnalogClock'; 
 import TradingJournal from './components/TradingJournal';
-import WalletView from './components/WalletView'; // DODAN UVOZ
-import AdBanner from './components/AdBanner'; // DODANO ZA OGLASE
-import AdCreatorModal from './components/AdCreatorModal'; // DODANO ZA ODRPEANJE MODALA
+import WalletView from './components/WalletView'; 
+import AdBanner from './components/AdBanner'; 
+import AdCreatorModal from './components/AdCreatorModal'; 
 
 // TUKAJ UVOZI SVOJ SUPABASE CLIENT
 import { supabase } from '@/lib/supabaseClient';
@@ -20,8 +20,8 @@ import { supabase } from '@/lib/supabaseClient';
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [activeTab, setActiveTab] = useState<'feed' | 'profile'>('feed');
-  const [activeSubTab, setActiveSubTab] = useState<'info' | 'journal' | 'wallet'>('info'); // DODAN 'wallet'
+  const [activeTab, setActiveTab] = useState<'feed' | 'profile' | 'community'>('feed');
+  const [activeSubTab, setActiveSubTab] = useState<'info' | 'journal' | 'wallet'>('info'); 
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -36,7 +36,6 @@ export default function Home() {
   });
   const [calcResult, setCalcResult] = useState<number | null>(null);
 
-  // --- POPRAVLJENO: 4 ZAČETNE VREDNOSTI ---
   const [prices, setPrices] = useState({ btc: 0, eur: 0, xau: 0, eth: 0 });
   const [priceFlash, setPriceFlash] = useState({ btc: '', eur: '', xau: '', eth: '' });
   const prevPrices = useRef({ btc: 0, eur: 0, xau: 0, eth: 0 });
@@ -45,11 +44,10 @@ export default function Home() {
   const [newPost, setNewPost] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  // --- DODANO: State za Premium objavo in Oglase ---
   const [isPremium, setIsPremium] = useState(false);
   const [priceBulls, setPriceBulls] = useState(5);
-  const [activeAds, setActiveAds] = useState<any[]>([]); // DODANO ZA OGLASE
-  const [isAdModalOpen, setIsAdModalOpen] = useState(false); // DODANO ZA MODAL OGLASOV
+  const [activeAds, setActiveAds] = useState<any[]>([]); 
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false); 
 
   const [messages, setMessages] = useState<any[]>([]);
   const [activeChat, setActiveChat] = useState<string | null>(null);
@@ -89,26 +87,24 @@ export default function Home() {
     total_gain: 0,
     max_drawdown: 0,
     win_rate: 0,
-    verify_source: 'manual', // DODANO: vir verifikacije
-    ftmo_username: '',       // DODANO: FTMO uporabnik
-    binance_key: '',         // DODANO: Binance Key
-    mql5_url: '',            // DODANO: MQL5 URL
-    gains_balance: 0,        // DODANO: Stanje denarnice
-    earned_balance: 0,       // DODANO: Zaslužek
-    subscription_price: 0    // POPRAVEK: Začetna vrednost
+    verify_source: 'manual', 
+    ftmo_username: '',       
+    binance_key: '',         
+    mql5_url: '',            
+    gains_balance: 0,        
+    earned_balance: 0,       
+    subscription_price: 0    
   });
 
   const [loginAlias, setLoginAlias] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
-  // --- REF ZA REALTIME SINHRONIZACIJO ---
   const activeChatRef = useRef<string | null>(null);
   useEffect(() => {
     activeChatRef.current = activeChat;
   }, [activeChat]);
 
-  // --- DODANO: STRIPE PROCES NAKUPA ---
   const handleStripePurchase = async (amount: number) => {
     try {
       const response = await fetch('/api/checkout', {
@@ -134,7 +130,6 @@ export default function Home() {
     }
   };
 
-  // --- DODANO: Funkcija za avtomatsko dodajanje/odvzemanje kovancev v denarnici ---
   const updateUserBalance = async (userId: string, amount: number) => {
     try {
       const { data: wallet } = await supabase
@@ -160,7 +155,6 @@ export default function Home() {
     }
   };
 
-  // --- DODANO: Pridobivanje oglasov ---
   const fetchAds = async () => {
     const { data, error } = await supabase
       .from('ads')
@@ -171,7 +165,6 @@ export default function Home() {
     }
   };
 
-  // --- DODANO: Funkcija za nakup in objavo oglasa ---
   const handleLaunchAd = async (adData: any, cost: number) => {
     if (userData.gains_balance < cost) {
       alert("Insufficient GAINS balance!");
@@ -250,7 +243,6 @@ export default function Home() {
     }
   };
 
-  // --- POPRAVLJENO: FUNKCIJA ZA MANUALNO ZAPIRANJE IN BE (Z LOCK EXIT PRICE) ---
   const handleSignalAction = async (postId: string, actionType: 'manual_close' | 'set_be') => {
     if (!userData.id) return;
     
@@ -260,7 +252,6 @@ export default function Home() {
         let exitPrice = null;
         const newStatus = actionType === 'manual_close' ? 'manual_exit' : 'be_void';
 
-        // Če zapira ročno, pridobimo zadnjo ceno iz našega API-ja, da jo zaklenemo
         if (actionType === 'manual_close') {
             const post = posts.find(p => p.id === postId);
             const priceRes = await fetch('/api/prices');
@@ -269,7 +260,6 @@ export default function Home() {
                 exitPrice = parseFloat(currentMarketPrices[post.pair].price);
             }
         } else {
-            // Če je Break Even, vzamemo kar vstopno ceno (Entry) tega posta
             const post = posts.find(p => p.id === postId);
             exitPrice = post?.entry || 0;
         }
@@ -294,7 +284,6 @@ export default function Home() {
     }
   };
 
-  // --- DODANA FUNKCIJA ZA ODKLEPANJE SIGNALOV ---
   const handleUnlockPost = async (postId: string, price: number) => {
     if (!userData.id) return;
 
@@ -377,7 +366,6 @@ export default function Home() {
   };
 
   const handleVisitProfile = (alias: string) => {
-    console.log("Navigating to node:", alias); 
     setSearchTerm("");
     setViewingAlias(alias);
     setActiveTab('profile');
@@ -386,13 +374,11 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- POPRAVLJENO: IZRAČUN STATISTIKE IZ SIGNALOV (NE GLASOV) ---
   const fetchAllProfiles = async () => {
     try {
-      // POPRAVEK: Tukaj sem dodal branje 'subscription_price'
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, alias, country, avatar_url, style, verify_source, earned_balance, subscription_price');
+        .select('id, alias, country, avatar_url, style, bio, verify_source, earned_balance, subscription_price');
         
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -438,7 +424,7 @@ export default function Home() {
             total_gain: totalWins,       
             max_drawdown: totalLosses,   
             win_rate: winRate,           
-            subscription_price: p.subscription_price || 0, // POPRAVEK: Shranjena cena naročnine
+            subscription_price: p.subscription_price || 0,
             myfxbook_url: '' 
           };
         });
@@ -502,7 +488,7 @@ export default function Home() {
         setMarketRisk(highImpact.length > 0 ? 'high' : 'low');
       }
     } catch (e) {
-      console.log("News API unavailable (Free Tier).");
+      console.log("News API unavailable.");
     }
   };
 
@@ -597,7 +583,7 @@ export default function Home() {
         country: userData.country,
         style: userData.style,
         market: userData.market,
-        subscription_price: userData.subscription_price || 0, // POPRAVEK: TUKAJ SEM DODAL SHRANJEVANJE CENE!
+        subscription_price: userData.subscription_price || 0,
         verify_source: 'manual', 
         updated_at: new Date()
       };
@@ -956,7 +942,7 @@ export default function Home() {
             max_drawdown: profileData.max_drawdown || 0,
             win_rate: profileData.win_rate || 0,
             verify_source: profileData.verify_source || 'manual',
-            subscription_price: profileData.subscription_price || 0, // POPRAVEK: Da si zapomni po osvežitvi!
+            subscription_price: profileData.subscription_price || 0,
             gains_balance: balanceData?.bulls_balance || 0,
             earned_balance: profileData.earned_balance || 0 
           }));
@@ -976,7 +962,7 @@ export default function Home() {
     };
     checkUser();
 
-    const fetchTwelveDataPrices = async () => {
+    const fetchPrices = async () => {
       try {
         const res = await fetch('/api/prices');
         const data = await res.json();
@@ -1010,8 +996,8 @@ export default function Home() {
       }
     };
 
-    fetchTwelveDataPrices();
-    const priceInterval = setInterval(fetchTwelveDataPrices, 600000); 
+    fetchPrices();
+    const priceInterval = setInterval(fetchPrices, 600000); 
     const newsInterval = setInterval(fetchEconomicCalendar, 3600000);
 
     return () => {
@@ -1028,7 +1014,6 @@ export default function Home() {
     }`}>
         
       <style jsx global>{`
-        /* CUSTOM TERMINAL SCROLLBAR */
         ::-webkit-scrollbar {
           width: 6px;
           height: 6px;
@@ -1043,7 +1028,6 @@ export default function Home() {
         ::-webkit-scrollbar-thumb:hover {
           background: rgba(59, 130, 246, 0.8);
         }
-        /* Za Firefox */
         * {
           scrollbar-width: thin;
           scrollbar-color: rgba(59, 130, 246, 0.5) transparent;
@@ -1179,11 +1163,11 @@ export default function Home() {
             {activeTab === 'profile' && (
               <div className="md:col-span-1 space-y-4">
                 <ProfileSidebar 
-                  userData={viewingAlias 
+                  userData={(viewingAlias && viewingAlias !== userData.alias) 
                     ? { 
                         id: posts.find(p => p.authorAlias === viewingAlias)?.user_id || allProfiles.find(p => p.alias === viewingAlias)?.id || '', 
                         alias: viewingAlias, 
-                        bio: "Terminal Node", 
+                        bio: allProfiles.find(p => p.alias === viewingAlias)?.bio || "Terminal Node", 
                         avatar: posts.find(p => p.authorAlias === viewingAlias)?.authorAvatar || allProfiles.find(p => p.alias === viewingAlias)?.avatar || null,
                         country: posts.find(p => p.authorAlias === viewingAlias)?.authorCountry || allProfiles.find(p => p.alias === viewingAlias)?.country || '🏳️',
                         style: allProfiles.find(p => p.alias === viewingAlias)?.style || 'Trader', 
@@ -1193,7 +1177,7 @@ export default function Home() {
                         max_drawdown: allProfiles.find(p => p.alias === viewingAlias)?.max_drawdown || 0,
                         win_rate: allProfiles.find(p => p.alias === viewingAlias)?.win_rate || 0,
                         verify_source: allProfiles.find(p => p.alias === viewingAlias)?.verify_source || 'manual',
-                        subscription_price: allProfiles.find(p => p.alias === viewingAlias)?.subscription_price || 0 // POPRAVEK: Prenos cene za prikaz
+                        subscription_price: allProfiles.find(p => p.alias === viewingAlias)?.subscription_price || 0 
                       } 
                     : userData
                   } 
@@ -1482,10 +1466,10 @@ export default function Home() {
                   <div className="w-full overflow-visible pb-32">
                     {activeSubTab === 'info' ? (
                       <FeedView 
-                        userData={viewingAlias 
+                        userData={(viewingAlias && viewingAlias !== userData.alias) 
                           ? { 
                               alias: viewingAlias, 
-                              bio: 'Terminal Node', 
+                              bio: allProfiles.find(p => p.alias === viewingAlias)?.bio || 'Terminal Node', 
                               avatar: posts.find(p => p.authorAlias === viewingAlias)?.authorAvatar || allProfiles.find(p => p.alias === viewingAlias)?.avatar || null,
                               country: posts.find(p => p.authorAlias === viewingAlias)?.authorCountry || allProfiles.find(p => p.alias === viewingAlias)?.country || '🏳️' 
                             } 
@@ -1516,7 +1500,7 @@ export default function Home() {
                       />
                     ) : activeSubTab === 'journal' ? ( 
                       <TradingJournal 
-                        userId={viewingAlias ? (posts.find(p => p.authorAlias === viewingAlias)?.user_id || allProfiles.find(p => p.alias === viewingAlias)?.id) : userData.id}
+                        userId={(viewingAlias && viewingAlias !== userData.alias) ? (posts.find(p => p.authorAlias === viewingAlias)?.user_id || allProfiles.find(p => p.alias === viewingAlias)?.id) : userData.id}
                         isOwnProfile={!viewingAlias || viewingAlias === userData.alias}
                         darkMode={darkMode}
                       />
