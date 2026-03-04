@@ -11,8 +11,8 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   
-  // State za datoteke v klepetu
-  const [uploadingFile, setUploadingFile] = useState(false);
+  // DODANO: State za prisotnost (Online uporabniki)
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
   // State za urejanje sporočil
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
@@ -31,6 +31,9 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
 
   // State za preverjanje dostopa
   const [hasAccess, setHasAccess] = useState(true);
+  
+  // DODANO: State za datoteke v klepetu
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -273,25 +276,46 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     checkChannelAccess();
   }, [activeChannel, userData.id, isOwnProfile, targetOwnerId]);
 
-  // 4. Klepet logika
+  // 4. Klepet logika + PRESENCE (Online Status)
   useEffect(() => {
     if (!activeChannel || !hasAccess) return;
+
+    // Fetch Messages
     const fetchMessages = async () => {
       const { data } = await supabase.from('community_messages').select('*').eq('channel_id', activeChannel.id).order('created_at', { ascending: true });
       if (data) setMessages(data);
     };
     fetchMessages();
 
-    const channelSub = supabase.channel(`chan-${activeChannel.id}`)
+    // Setup Realtime Channel s Presence
+    const channelSub = supabase.channel(`chan-${activeChannel.id}`, {
+      config: {
+        presence: {
+          key: userData.alias,
+        },
+      },
+    });
+
+    channelSub
       .on('postgres_changes', { event: '*', schema: 'public', table: 'community_messages', filter: `channel_id=eq.${activeChannel.id}` }, 
       (payload) => {
         if (payload.eventType === 'INSERT') setMessages(prev => [...prev, payload.new]);
         if (payload.eventType === 'DELETE') setMessages(prev => prev.filter(m => m.id !== payload.old.id));
         if (payload.eventType === 'UPDATE') setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
       })
-      .subscribe();
+      .on('presence', { event: 'sync' }, () => {
+        const newState = channelSub.presenceState();
+        // newState je objekt z aliasi kot ključi
+        setOnlineUsers(Object.keys(newState));
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channelSub.track({ online_at: new Date().toISOString() });
+        }
+      });
+
     return () => { supabase.removeChannel(channelSub); };
-  }, [activeChannel, hasAccess]);
+  }, [activeChannel, hasAccess, userData.alias]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !activeChannel || !userData?.id) return;
@@ -371,6 +395,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 )}
               </div>
 
+              {/* DODANO: Vnos za nov kanal s sliko */}
               {showAddChan === cat.id && (
                 <div className="p-2 mb-2 bg-zinc-800/30 rounded-lg border border-zinc-700 space-y-2 animate-in slide-in-from-top-1">
                   <div className="flex items-center gap-2">
@@ -380,7 +405,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                       ) : (
                         '📷'
                       )}
-                      <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                      <input type="file" accept="image/png, image/jpeg" onChange={handleLogoChange} className="hidden" />
                     </label>
                     <input 
                       className="w-full bg-transparent text-[10px] outline-none" 
@@ -414,6 +439,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           : 'text-zinc-400 hover:bg-zinc-800'
                       }`}
                     >
+                      {/* DODANO: Prikaz majhnega logotipa ali privzete ikone */}
                       {chan.logo_url ? (
                         <img src={chan.logo_url} className="w-8 h-8 rounded object-cover shadow-sm shrink-0" />
                       ) : (
@@ -439,13 +465,23 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
         {activeChannel ? (
           <>
             <div className="p-6 border-b flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                {activeChannel.logo_url && (
-                    <img src={activeChannel.logo_url} className="w-10 h-10 rounded-lg object-cover shadow-md" />
-                )}
-                <h2 className="text-sm font-black uppercase tracking-widest">
-                  {activeChannel.name}
-                </h2>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-3">
+                  {activeChannel.logo_url && (
+                      <img src={activeChannel.logo_url} className="w-10 h-10 rounded-lg object-cover shadow-md" />
+                  )}
+                  <h2 className="text-sm font-black uppercase tracking-widest">
+                    {activeChannel.name}
+                  </h2>
+                </div>
+
+                {/* PRIKAZ ONLINE UPORABNIKOV */}
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                    {onlineUsers.length} Online: {onlineUsers.join(', ')}
+                  </span>
+                </div>
               </div>
               {isOwnProfile && activeChannel.is_premium && (
                 <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500">
