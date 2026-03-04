@@ -21,6 +21,10 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   const [showAddChan, setShowAddChan] = useState<string | null>(null); // Vsebuje ID kategorije
   const [newChanName, setNewChanName] = useState("");
   const [newChanIsPremium, setNewChanIsPremium] = useState(false);
+  
+  // DODANO: State za logotip kanala
+  const [newChanLogo, setNewChanLogo] = useState<File | null>(null);
+  const [newChanLogoPreview, setNewChanLogoPreview] = useState<string | null>(null);
 
   // State za preverjanje dostopa
   const [hasAccess, setHasAccess] = useState(true);
@@ -77,23 +81,88 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     const { error } = await supabase.from('community_categories').delete().eq('id', catId);
     if (!error) fetchHubData();
   };
+  
+  // DODANO: Kopiranje povezave za vabilo
+  const copyInviteLink = () => {
+    const link = `${window.location.origin}/profile/${userData.alias}`;
+    navigator.clipboard.writeText(link);
+    alert("Invite link copied to clipboard!");
+  };
+  
+  // DODANO: Funkcija za izbiro in preverjanje slike logotipa
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      const file = e.target.files[0];
+      
+      // Preverimo velikost datoteke (maksimalno 1 MB = 1048576 bajtov)
+      if (file.size > 1048576) {
+        alert("Slikica je prevelika! Prosim, izberi sliko, manjšo od 1 MB.");
+        return;
+      }
+      
+      // Preverimo tip datoteke (samo slike)
+      if (!file.type.startsWith('image/')) {
+        alert("Prosim, izberi veljavno sliko (PNG, JPG, ...).");
+        return;
+      }
 
-  // 3. Ustvarjanje Kanala
+      setNewChanLogo(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setNewChanLogoPreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 3. Ustvarjanje Kanala (posodobljeno z nalaganjem slike)
   const handleAddChannel = async (catId: string) => {
     if (!newChanName.trim()) return;
-    const { error } = await supabase.from('community_channels').insert([
-      { 
-        name: newChanName.toLowerCase().replace(/\s+/g, '-'), 
-        category_id: catId, 
-        owner_id: userData.id,
-        is_premium: newChanIsPremium 
+    
+    try {
+      let finalLogoUrl = null;
+      
+      // Če je slika izbrana, jo naložimo v Storage
+      if (newChanLogo) {
+        const fileExtension = newChanLogo.name.split('.').pop();
+        const fileName = `${Date.now()}-${newChanName.toLowerCase().replace(/\s+/g, '-')}.${fileExtension}`;
+        const filePath = `${userData.id}/${fileName}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('community-logos')
+          .upload(filePath, newChanLogo);
+          
+        if (uploadError) throw uploadError;
+        
+        const { data: urlData } = supabase.storage
+          .from('community-logos')
+          .getPublicUrl(filePath);
+          
+        finalLogoUrl = urlData.publicUrl;
       }
-    ]);
-    if (!error) {
+
+      const { error } = await supabase.from('community_channels').insert([
+        { 
+          name: newChanName.toLowerCase().replace(/\s+/g, '-'), 
+          category_id: catId, 
+          owner_id: userData.id,
+          is_premium: newChanIsPremium,
+          logo_url: finalLogoUrl // Shranimo URL slike
+        }
+      ]);
+      
+      if (error) throw error;
+      
       setNewChanName("");
       setNewChanIsPremium(false);
+      setNewChanLogo(null);
+      setNewChanLogoPreview(null);
       setShowAddChan(null);
       fetchHubData();
+      
+    } catch (err: any) {
+      console.error("Napaka pri ustvarjanju kanala:", err);
+      alert("Prišlo je do napake pri nalaganju logotipa ali ustvarjanju kanala.");
     }
   };
 
@@ -222,13 +291,16 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
       {/* LEVA STRAN: TVOJ HUB */}
       <div className={`w-full md:w-64 flex-shrink-0 flex flex-col border-r ${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
         <div className="p-6 border-b border-zinc-800/30 flex justify-between items-center">
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Channels Hub</h2>
+          <div className="flex flex-col">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Channels Hub</h2>
+            <button onClick={copyInviteLink} className="text-[7px] text-zinc-500 uppercase font-bold hover:text-white text-left mt-1">🔗 Copy Invite Link</button>
+          </div>
           {isOwnProfile && (
             <button onClick={() => setShowAddCat(true)} className="text-blue-500 hover:scale-125 transition-transform text-lg">➕</button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
           {showAddCat && (
             <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/30 mb-4 animate-in slide-in-from-top-2">
               <input 
@@ -257,21 +329,35 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 )}
               </div>
 
+              {/* DODANO: Vnos za nov kanal s sliko */}
               {showAddChan === cat.id && (
-                <div className="p-2 mb-2 bg-zinc-800/30 rounded-lg border border-zinc-700">
-                  <input 
-                    className="w-full bg-transparent text-[10px] outline-none mb-1" 
-                    placeholder="Channel name..."
-                    value={newChanName}
-                    onChange={e => setNewChanName(e.target.value)}
-                  />
-                  <label className="flex items-center gap-2 cursor-pointer mb-2">
-                    <input type="checkbox" checked={newChanIsPremium} onChange={e => setNewChanIsPremium(e.target.checked)} />
-                    <span className="text-[8px] uppercase font-bold">VIP Access 🔒</span>
-                  </label>
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => setShowAddChan(null)} className="text-[8px]">X</button>
-                    <button onClick={() => handleAddChannel(cat.id)} className="text-[8px] font-black text-blue-500">OK</button>
+                <div className="p-2 mb-2 bg-zinc-800/30 rounded-lg border border-zinc-700 space-y-2 animate-in slide-in-from-top-1">
+                  <div className="flex items-center gap-2">
+                    <label className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 cursor-pointer border ${darkMode ? 'bg-zinc-900 border-zinc-700 text-zinc-600' : 'bg-zinc-50 border-zinc-200 text-zinc-400'}`}>
+                      {newChanLogoPreview ? (
+                        <img src={newChanLogoPreview} className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        '📷'
+                      )}
+                      <input type="file" accept="image/png, image/jpeg" onChange={handleLogoChange} className="hidden" />
+                    </label>
+                    <input 
+                      className="w-full bg-transparent text-[10px] outline-none" 
+                      placeholder="Channel name..."
+                      value={newChanName}
+                      onChange={e => setNewChanName(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between items-center pl-10">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={newChanIsPremium} onChange={e => setNewChanIsPremium(e.target.checked)} className="accent-blue-500" />
+                      <span className="text-[8px] uppercase font-bold">VIP 🔒</span>
+                    </label>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => { setShowAddChan(null); setNewChanLogo(null); setNewChanLogoPreview(null); }} className="text-[8px] uppercase font-bold text-zinc-500">X</button>
+                      <button onClick={() => handleAddChannel(cat.id)} className="text-[8px] uppercase font-black text-blue-500">OK</button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -281,13 +367,20 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                   <div key={chan.id} className="group/chan flex items-center gap-1">
                     <button
                       onClick={() => setActiveChannel(chan)}
-                      className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
+                      className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all ${
                         activeChannel?.id === chan.id 
-                          ? (darkMode ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-50 text-blue-600')
+                          ? (darkMode ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-lg' : 'bg-blue-50 text-blue-600 border border-blue-200 shadow-md')
                           : 'text-zinc-400 hover:bg-zinc-800'
                       }`}
                     >
-                      <span>{chan.is_premium ? '🔒' : '#'}</span>
+                      {/* DODANO: Prikaz majhnega logotipa ali privzete ikone */}
+                      {chan.logo_url ? (
+                        <img src={chan.logo_url} className="w-8 h-8 rounded object-cover shadow-sm shrink-0" />
+                      ) : (
+                        <div className={`w-8 h-8 rounded shrink-0 flex items-center justify-center text-xs font-black uppercase ${activeChannel?.id === chan.id ? (darkMode ? 'bg-blue-600/30' : 'bg-blue-100') : (darkMode ? 'bg-zinc-800' : 'bg-zinc-100')}`}>
+                          {chan.is_premium ? '🔒' : '#'}
+                        </div>
+                      )}
                       <span className="truncate">{chan.name}</span>
                     </button>
                     {isOwnProfile && (
@@ -302,13 +395,21 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
       </div>
 
       {/* DESNA STRAN: CHAT */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col backdrop-blur-3xl">
         {activeChannel ? (
           <>
-            <div className="p-6 border-b flex justify-between items-center backdrop-blur-md">
-              <h2 className="text-sm font-black uppercase tracking-widest">
-                {activeChannel.is_premium ? '🔒 ' : '# '}{activeChannel.name}
-              </h2>
+            <div className="p-6 border-b flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                {/* DODANO: Prikaz logotipa v headerju chata */}
+                {activeChannel.logo_url && (
+                    <img src={activeChannel.logo_url} className="w-10 h-10 rounded-lg object-cover shadow-md" />
+                )}
+                <h2 className="text-sm font-black uppercase tracking-widest">
+                  {activeChannel.is_premium && !activeChannel.logo_url ? '🔒 ' : ''}
+                  {!activeChannel.is_premium && !activeChannel.logo_url ? '# ' : ''}
+                  {activeChannel.name}
+                </h2>
+              </div>
               {isOwnProfile && activeChannel.is_premium && (
                 <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500">
                   Invite Member
@@ -333,7 +434,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                       </div>
                       
                       {editingMsgId === m.id ? (
-                        <div className="flex flex-col gap-2 bg-zinc-800 p-3 rounded-xl border border-zinc-700 min-w-[200px]">
+                        <div className="flex flex-col gap-2 bg-zinc-800 p-3 rounded-xl border border-zinc-700 min-w-[200px] shadow-inner">
                           <textarea 
                             className="bg-transparent text-[11px] outline-none resize-none h-16 text-white"
                             value={editingMsgText}
@@ -345,7 +446,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           </div>
                         </div>
                       ) : (
-                        <div className={`p-3 rounded-2xl text-[11px] shadow-sm ${m.author_id === userData.id ? 'bg-blue-600 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
+                        <div className={`p-3 rounded-2xl text-[11px] shadow-sm ${m.author_id === userData.id ? 'bg-blue-600 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
                           {m.text}
                         </div>
                       )}
@@ -353,7 +454,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                   ))}
                   <div ref={messagesEndRef} />
                 </div>
-                <div className="p-6 border-t">
+                <div className="p-6 border-t mt-auto">
                   <div className="flex gap-2 p-2 rounded-2xl border border-zinc-800 bg-zinc-900/50">
                     <input 
                       className="flex-1 bg-transparent outline-none px-3 text-[11px]" 
@@ -367,8 +468,8 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-10 text-center animate-in fade-in">
-                <span className="text-6xl mb-6">🔒</span>
+              <div className="flex-1 flex flex-col items-center justify-center p-10 text-center animate-in fade-in backdrop-blur-xl">
+                <span className="text-6xl mb-6 block">🔒</span>
                 <h2 className="text-xl font-bold uppercase tracking-widest text-white">VIP Access Restricted</h2>
                 <p className="text-zinc-500 text-[10px] uppercase mt-2 max-w-xs leading-relaxed">
                   This channel is reserved for VIP subscribers or members with a special invitation.
