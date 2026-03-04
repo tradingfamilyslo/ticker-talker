@@ -582,7 +582,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           </div>
                         </div>
                       ) : (
-                        <div className={`p-3 rounded-2xl text-[11px] shadow-lg flex flex-col gap-2 backdrop-blur-[2px] ${m.author_id === userData.id ? 'bg-blue-600/90 text-white rounded-tr-none' : 'bg-black/40 border border-white/10 text-white rounded-tl-none backdrop-blur-sm'}`}>
+                        <div className={`p-3 rounded-2xl text-[11px] shadow-lg flex flex-col gap-2 backdrop-blur-[2px] ${m.author_id === userData.id ? 'bg-blue-600/90 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-white/90 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
                           {m.file_url && (
                             <a href={m.file_url} target="_blank" rel="noreferrer" className="max-w-xs overflow-hidden rounded-lg">
                                <img src={m.file_url} className="w-full h-auto hover:scale-105 transition-transform" alt="attached" />
