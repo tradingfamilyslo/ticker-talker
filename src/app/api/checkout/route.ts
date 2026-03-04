@@ -8,11 +8,24 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 export async function POST(req: Request) {
   try {
-    const { amount, userAlias, userId } = await req.json();
+    // Dodamo traderId v destrukturiranje podatkov
+    const { amount, userAlias, userId, traderId } = await req.json();
 
     if (!userId || !amount) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
+
+    // Ugotovimo, ali gre za naročnino (če je traderId prisoten) ali za top-up
+    const isSubscription = !!traderId;
+    
+    // Nastavimo ime izdelka in opis glede na tip plačila
+    const productName = isSubscription 
+      ? `VIP Subscription to ${userAlias}` 
+      : `${amount} GAINS Coins`;
+      
+    const productDescription = isSubscription
+      ? `Monthly VIP access to signals and private hub.`
+      : `Terminal Top-up for Node: ${userAlias}`;
 
     // Ustvarimo sejo za plačilo
     const session = await stripe.checkout.sessions.create({
@@ -22,26 +35,28 @@ export async function POST(req: Request) {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: `${amount} GAINS Coins`,
-              description: `Terminal Top-up for Node: ${userAlias}`,
+              name: productName,
+              description: productDescription,
             },
-            unit_amount: 10, // 0.10€ na kovanec
+            // Če je naročnina, je 'amount' dejanska cena v EUR (npr. 50),
+            // če je top-up, pa 'amount' pomeni število kovancev po 0.10€
+            unit_amount: isSubscription ? amount * 100 : 10, 
           },
-          quantity: amount,
+          quantity: isSubscription ? 1 : amount,
         },
       ],
       mode: 'payment',
-      // success_url in cancel_url zdaj bereš dinamično iz izvora zahteve
       success_url: `${req.headers.get('origin')}/?success=true`,
       cancel_url: `${req.headers.get('origin')}/?canceled=true`,
       metadata: {
         userId: userId,
+        traderId: traderId || '', // Shranimo ID tistega, ki dobi naročnino
         amount: amount.toString(),
-        type: 'top_up' // Dodano, da webhook ve, da gre za nakup kovancev
+        type: isSubscription ? 'subscription' : 'topup' // Ključno za Webhook!
       },
     });
 
-    // Vrnemo URL za direktno preusmeritev (rešitev za leto 2026!)
+    // Vrnemo URL za direktno preusmeritev
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
     console.error("Stripe Error:", err);

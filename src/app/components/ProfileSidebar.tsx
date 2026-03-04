@@ -28,7 +28,8 @@ export default function ProfileSidebar({
   setActiveSubTab,
 
   onOpenRiskCalc,
-  handleSubscribeMonthly 
+  handleSubscribeMonthly,
+  handleStripePurchase // Dodano za Stripe klic
 }: any) {
   
   // Zagotovimo, da imamo varne objekte
@@ -254,12 +255,14 @@ export default function ProfileSidebar({
               "{safeUserData.bio || "No bio set."}"
             </p>
 
+            {/* GUMB ZA VIP NAROČNINO - Prikaže se samo na tujem profilu */}
             {!isOwnProfile && safeUserData.subscription_price > 0 && (
               <button 
-                onClick={() => handleSubscribeMonthly && handleSubscribeMonthly(safeUserData.id, safeUserData.subscription_price)}
-                className="w-full mt-4 text-[10px] font-black py-4 rounded-xl uppercase transition-all bg-yellow-500 text-black hover:bg-yellow-400 shadow-lg shadow-yellow-500/30 animate-pulse"
+                onClick={() => handleStripePurchase && handleStripePurchase(safeUserData.subscription_price)}
+                className="w-full mt-4 py-4 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl border border-yellow-400/50 flex items-center justify-center gap-2 animate-pulse"
               >
-                💎 Subscribe for {safeUserData.subscription_price} GAINS / mo
+                <span>💎 Subscribe for VIP</span>
+                <span className="bg-black/20 px-2 py-1 rounded-lg">${safeUserData.subscription_price}/mo</span>
               </button>
             )}
 

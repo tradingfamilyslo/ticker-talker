@@ -106,7 +106,8 @@ export default function Home() {
     activeChatRef.current = activeChat;
   }, [activeChat]);
 
-  const handleStripePurchase = async (amount: number) => {
+  // POPRAVLJENA FUNKCIJA ZA STRIPE (Podpira Top-up in VIP Naročnino)
+  const handleStripePurchase = async (amount: number, targetTraderId?: string) => {
     try {
       const response = await fetch('/api/checkout', {
         method: 'POST',
@@ -114,7 +115,8 @@ export default function Home() {
         body: JSON.stringify({
           amount: amount,
           userAlias: userData?.alias || "User",
-          userId: userData?.id
+          userId: userData?.id,
+          traderId: targetTraderId // Če je to prisotno, bo Webhook vedel, da je naročnina
         }),
       });
 
@@ -1221,6 +1223,7 @@ export default function Home() {
                   setActiveSubTab={setActiveSubTab}
                   onOpenRiskCalc={() => setShowRiskCalc(true)}
                   onVisitProfile={handleVisitProfile} 
+                  handleStripePurchase={handleStripePurchase} // DODANO: Prenos funkcije v sidebar
                 />
 
                 {viewingAlias && viewingAlias !== userData.alias && (
@@ -1481,12 +1484,13 @@ export default function Home() {
                   </div>
                 </div>
               ) : activeTab === 'community' ? (
-                // DODANO ZA DISCORD HUB PRIKAZ
                 <div className="animate-in fade-in duration-500 w-full mb-32">
                   <CommunityView 
                     userData={userData} 
                     darkMode={darkMode} 
-                    onBack={() => setActiveTab('feed')} 
+                    onBack={() => setActiveTab('feed')}
+                    isOwnProfile={!viewingAlias || viewingAlias === userData.alias}
+                    viewingId={viewingAlias ? (allProfiles.find(p => p.alias === viewingAlias)?.id) : userData.id}
                   />
                 </div>
               ) : (
