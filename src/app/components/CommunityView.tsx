@@ -11,6 +11,10 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   
+  // State za urejanje sporočil
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingMsgText, setEditingMsgText] = useState("");
+
   // State za ustvarjanje novih stvari
   const [showAddCat, setShowAddCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -67,6 +71,13 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     }
   };
 
+  // DODANO: Brisanje kategorije
+  const handleRemoveCategory = async (catId: string) => {
+    if (!confirm("Delete entire category and all channels inside?")) return;
+    const { error } = await supabase.from('community_categories').delete().eq('id', catId);
+    if (!error) fetchHubData();
+  };
+
   // 3. Ustvarjanje Kanala
   const handleAddChannel = async (catId: string) => {
     if (!newChanName.trim()) return;
@@ -82,6 +93,16 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
       setNewChanName("");
       setNewChanIsPremium(false);
       setShowAddChan(null);
+      fetchHubData();
+    }
+  };
+
+  // DODANO: Brisanje kanala
+  const handleRemoveChannel = async (chanId: string) => {
+    if (!confirm("Delete this channel?")) return;
+    const { error } = await supabase.from('community_channels').delete().eq('id', chanId);
+    if (!error) {
+      if (activeChannel?.id === chanId) setActiveChannel(null);
       fetchHubData();
     }
   };
@@ -144,7 +165,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     checkChannelAccess();
   }, [activeChannel, userData.id, isOwnProfile, targetOwnerId]);
 
-  // 4. Klepet logika (ostane ista kot prej)
+  // 4. Klepet logika
   useEffect(() => {
     if (!activeChannel || !hasAccess) return;
     const fetchMessages = async () => {
@@ -154,8 +175,12 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     fetchMessages();
 
     const channelSub = supabase.channel(`chan-${activeChannel.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_messages', filter: `channel_id=eq.${activeChannel.id}` }, 
-      (payload) => setMessages(prev => [...prev, payload.new]))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'community_messages', filter: `channel_id=eq.${activeChannel.id}` }, 
+      (payload) => {
+        if (payload.eventType === 'INSERT') setMessages(prev => [...prev, payload.new]);
+        if (payload.eventType === 'DELETE') setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        if (payload.eventType === 'UPDATE') setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+      })
       .subscribe();
     return () => { supabase.removeChannel(channelSub); };
   }, [activeChannel, hasAccess]);
@@ -171,6 +196,24 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     setNewMessage("");
   };
 
+  // DODANO: Brisanje sporočila
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!confirm("Delete this message?")) return;
+    await supabase.from('community_messages').delete().eq('id', msgId).eq('author_id', userData.id);
+  };
+
+  // DODANO: Urejanje sporočila
+  const handleUpdateMessage = async (msgId: string) => {
+    if (!editingMsgText.trim()) return;
+    const { error } = await supabase.from('community_messages').update({ text: editingMsgText }).eq('id', msgId).eq('author_id', userData.id);
+    if (!error) {
+      setEditingMsgId(null);
+      setEditingMsgText("");
+    }
+  };
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
   return (
     <div className={`flex flex-col md:flex-row h-[75vh] min-h-[600px] w-full rounded-[2.5rem] border overflow-hidden shadow-2xl ${
       darkMode ? 'bg-zinc-950/80 border-zinc-800' : 'bg-white border-zinc-200'
@@ -181,12 +224,11 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
         <div className="p-6 border-b border-zinc-800/30 flex justify-between items-center">
           <h2 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Channels Hub</h2>
           {isOwnProfile && (
-            <button onClick={() => setShowAddCat(true)} className="text-blue-500 hover:scale-110 transition-all">➕</button>
+            <button onClick={() => setShowAddCat(true)} className="text-blue-500 hover:scale-125 transition-transform text-lg">➕</button>
           )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* VNOS ZA NOVO KATEGORIJO */}
           {showAddCat && (
             <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/30 mb-4 animate-in slide-in-from-top-2">
               <input 
@@ -208,11 +250,13 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
               <div className="flex justify-between items-center px-2 mb-2">
                 <h3 className="text-[8px] font-black uppercase tracking-[0.2em] text-zinc-500">{cat.name}</h3>
                 {isOwnProfile && (
-                  <button onClick={() => setShowAddChan(cat.id)} className="opacity-0 group-hover/cat:opacity-100 text-[10px]">+</button>
+                  <div className="flex gap-2 items-center">
+                    <button onClick={() => setShowAddChan(cat.id)} className="text-[14px] text-blue-500 hover:scale-125">+</button>
+                    <button onClick={() => handleRemoveCategory(cat.id)} className="text-[14px] text-red-500 hover:scale-125">×</button>
+                  </div>
                 )}
               </div>
 
-              {/* VNOS ZA NOV KANAL */}
               {showAddChan === cat.id && (
                 <div className="p-2 mb-2 bg-zinc-800/30 rounded-lg border border-zinc-700">
                   <input 
@@ -222,7 +266,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                     onChange={e => setNewChanName(e.target.value)}
                   />
                   <label className="flex items-center gap-2 cursor-pointer mb-2">
-                    <input type="checkbox" checked={newChanIsPremium} onChange={e => setNewChanIsPremium(target => e.target.checked)} />
+                    <input type="checkbox" checked={newChanIsPremium} onChange={e => setNewChanIsPremium(e.target.checked)} />
                     <span className="text-[8px] uppercase font-bold">VIP Access 🔒</span>
                   </label>
                   <div className="flex justify-end gap-2">
@@ -234,18 +278,22 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
 
               <div className="space-y-1">
                 {cat.channels.map((chan: any) => (
-                  <button
-                    key={chan.id}
-                    onClick={() => setActiveChannel(chan)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
-                      activeChannel?.id === chan.id 
-                        ? (darkMode ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-50 text-blue-600')
-                        : 'text-zinc-400 hover:bg-zinc-800'
-                    }`}
-                  >
-                    <span>{chan.is_premium ? '🔒' : '#'}</span>
-                    <span className="truncate">{chan.name}</span>
-                  </button>
+                  <div key={chan.id} className="group/chan flex items-center gap-1">
+                    <button
+                      onClick={() => setActiveChannel(chan)}
+                      className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
+                        activeChannel?.id === chan.id 
+                          ? (darkMode ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-50 text-blue-600')
+                          : 'text-zinc-400 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span>{chan.is_premium ? '🔒' : '#'}</span>
+                      <span className="truncate">{chan.name}</span>
+                    </button>
+                    {isOwnProfile && (
+                      <button onClick={() => handleRemoveChannel(chan.id)} className="text-zinc-600 hover:text-red-500 px-1 text-lg">×</button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -270,13 +318,37 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
 
             {hasAccess ? (
               <>
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                   {messages.map((m: any, i) => (
-                    <div key={i} className={`flex flex-col ${m.author_id === userData.id ? 'items-end' : 'items-start'}`}>
-                      <span className="text-[7px] font-black uppercase opacity-40 mb-1">{m.author_alias}</span>
-                      <div className={`p-3 rounded-2xl text-[11px] ${m.author_id === userData.id ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-200'}`}>
-                        {m.text}
+                    <div key={m.id || i} className={`flex flex-col group ${m.author_id === userData.id ? 'items-end' : 'items-start'}`}>
+                      <div className="flex items-center gap-3 mb-1 px-1">
+                        {!isOwnProfile && <span className="text-[7px] font-black uppercase opacity-40">{m.author_alias}</span>}
+                        {m.author_id === userData.id && (
+                          <div className="flex gap-3 items-center">
+                            <button onClick={() => { setEditingMsgId(m.id); setEditingMsgText(m.text); }} className="text-[12px] hover:scale-125 transition-transform">✏️</button>
+                            <button onClick={() => handleDeleteMessage(m.id)} className="text-[12px] hover:scale-125 transition-transform">🗑️</button>
+                            <span className="text-[7px] font-black uppercase opacity-40">{m.author_alias}</span>
+                          </div>
+                        )}
                       </div>
+                      
+                      {editingMsgId === m.id ? (
+                        <div className="flex flex-col gap-2 bg-zinc-800 p-3 rounded-xl border border-zinc-700 min-w-[200px]">
+                          <textarea 
+                            className="bg-transparent text-[11px] outline-none resize-none h-16 text-white"
+                            value={editingMsgText}
+                            onChange={e => setEditingMsgText(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => setEditingMsgId(null)} className="text-[8px] uppercase font-bold text-zinc-400">Cancel</button>
+                            <button onClick={() => handleUpdateMessage(m.id)} className="text-[8px] uppercase font-black text-blue-500">Save</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`p-3 rounded-2xl text-[11px] shadow-sm ${m.author_id === userData.id ? 'bg-blue-600 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
+                          {m.text}
+                        </div>
+                      )}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
