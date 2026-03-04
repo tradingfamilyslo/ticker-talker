@@ -228,18 +228,24 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     }
   };
 
-  // NOVO: Funkcija za posodobitev stila kanala (Gradient)
-  const handleUpdateStyle = async () => {
+  // FIKSIRANO: Funkcija za posodobitev stila kanala (Gradient)
+  const handleUpdateStyle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!activeChannel || !isOwnProfile) return;
-    const { error } = await supabase.from('community_channels')
-      .update({ bg_color: tempColorA, bg_image_url: tempColorB })
-      .eq('id', activeChannel.id);
     
-    if (!error) {
+    const { data, error } = await supabase.from('community_channels')
+      .update({ bg_color: tempColorA, bg_image_url: tempColorB })
+      .eq('id', activeChannel.id)
+      .select();
+    
+    if (!error && data) {
       alert("Style locked! 🎨");
-      fetchHubData();
-      setActiveChannel({...activeChannel, bg_color: tempColorA, bg_image_url: tempColorB});
+      setActiveChannel(data[0]);
       setShowStylePicker(false);
+      fetchHubData();
+    } else {
+      alert("Style update failed.");
     }
   };
 
