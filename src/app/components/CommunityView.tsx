@@ -11,6 +11,9 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   
+  // State za datoteke v klepetu
+  const [uploadingFile, setUploadingFile] = useState(false);
+
   // State za urejanje sporočil
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingMsgText, setEditingMsgText] = useState("");
@@ -176,6 +179,42 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     }
   };
 
+  // Funkcija za nalaganje slik v klepetu
+  const handleChatFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0] || !activeChannel) return;
+    const file = e.target.files[0];
+    setUploadingFile(true);
+
+    try {
+      const fileName = `${Date.now()}-${file.name}`;
+      const filePath = `chat/${activeChannel.id}/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('chat-attachments')
+        .getPublicUrl(filePath);
+
+      await supabase.from('community_messages').insert([{
+        channel_id: activeChannel.id,
+        author_id: userData.id,
+        author_alias: userData.alias,
+        text: "", 
+        file_url: urlData.publicUrl
+      }]);
+
+    } catch (err) {
+      console.error(err);
+      alert("Fail to upload file.");
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   // FUNKCIJA ZA VABLJENJE (Samo za lastnika)
   const handleInviteUser = async () => {
     if (!activeChannel) return;
@@ -290,10 +329,13 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
       
       {/* LEVA STRAN: TVOJ HUB */}
       <div className={`w-full md:w-64 flex-shrink-0 flex flex-col border-r ${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-        <div className="p-6 border-b border-zinc-800/30 flex justify-between items-center">
+        <div className="p-6 border-b border-zinc-800/30 flex justify-between items-start">
           <div className="flex flex-col">
             <h2 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Channels Hub</h2>
-            <button onClick={copyInviteLink} className="text-[7px] text-zinc-500 uppercase font-bold hover:text-white text-left mt-1">🔗 Copy Invite Link</button>
+            <div className="flex gap-2 mt-1">
+              <button onClick={copyInviteLink} className="text-[7px] text-zinc-500 uppercase font-bold hover:text-white">🔗 Link</button>
+              <button onClick={onBack} className="text-[7px] text-red-500 uppercase font-bold hover:text-red-400">← Exit</button>
+            </div>
           </div>
           {isOwnProfile && (
             <button onClick={() => setShowAddCat(true)} className="text-blue-500 hover:scale-125 transition-transform text-lg">➕</button>
@@ -329,17 +371,16 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 )}
               </div>
 
-              {/* DODANO: Vnos za nov kanal s sliko */}
               {showAddChan === cat.id && (
                 <div className="p-2 mb-2 bg-zinc-800/30 rounded-lg border border-zinc-700 space-y-2 animate-in slide-in-from-top-1">
                   <div className="flex items-center gap-2">
-                    <label className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 cursor-pointer border ${darkMode ? 'bg-zinc-900 border-zinc-700 text-zinc-600' : 'bg-zinc-50 border-zinc-200 text-zinc-400'}`}>
+                    <label className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 cursor-pointer border border-zinc-700 bg-zinc-900`}>
                       {newChanLogoPreview ? (
                         <img src={newChanLogoPreview} className="w-full h-full object-cover rounded-lg" />
                       ) : (
                         '📷'
                       )}
-                      <input type="file" accept="image/png, image/jpeg" onChange={handleLogoChange} className="hidden" />
+                      <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
                     </label>
                     <input 
                       className="w-full bg-transparent text-[10px] outline-none" 
@@ -373,7 +414,6 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           : 'text-zinc-400 hover:bg-zinc-800'
                       }`}
                     >
-                      {/* DODANO: Prikaz majhnega logotipa ali privzete ikone */}
                       {chan.logo_url ? (
                         <img src={chan.logo_url} className="w-8 h-8 rounded object-cover shadow-sm shrink-0" />
                       ) : (
@@ -400,13 +440,10 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
           <>
             <div className="p-6 border-b flex justify-between items-center">
               <div className="flex items-center gap-3">
-                {/* DODANO: Prikaz logotipa v headerju chata */}
                 {activeChannel.logo_url && (
                     <img src={activeChannel.logo_url} className="w-10 h-10 rounded-lg object-cover shadow-md" />
                 )}
                 <h2 className="text-sm font-black uppercase tracking-widest">
-                  {activeChannel.is_premium && !activeChannel.logo_url ? '🔒 ' : ''}
-                  {!activeChannel.is_premium && !activeChannel.logo_url ? '# ' : ''}
                   {activeChannel.name}
                 </h2>
               </div>
@@ -446,22 +483,32 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           </div>
                         </div>
                       ) : (
-                        <div className={`p-3 rounded-2xl text-[11px] shadow-sm ${m.author_id === userData.id ? 'bg-blue-600 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
-                          {m.text}
+                        <div className={`p-3 rounded-2xl text-[11px] shadow-sm flex flex-col gap-2 ${m.author_id === userData.id ? 'bg-blue-600 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
+                          {m.file_url && (
+                            <a href={m.file_url} target="_blank" rel="noreferrer" className="max-w-xs overflow-hidden rounded-lg">
+                               <img src={m.file_url} className="w-full h-auto hover:scale-105 transition-transform" alt="attached" />
+                            </a>
+                          )}
+                          {m.text && <span>{m.text}</span>}
                         </div>
                       )}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
                 </div>
+                
                 <div className="p-6 border-t mt-auto">
-                  <div className="flex gap-2 p-2 rounded-2xl border border-zinc-800 bg-zinc-900/50">
+                  <div className="flex items-center gap-2 p-2 rounded-2xl border border-zinc-800 bg-zinc-900/50">
+                    <label className={`p-2 rounded-xl cursor-pointer hover:bg-zinc-800 transition-all ${uploadingFile ? 'animate-pulse opacity-50' : ''}`}>
+                       <span className="text-lg">📎</span>
+                       <input type="file" className="hidden" onChange={handleChatFileUpload} disabled={uploadingFile} />
+                    </label>
                     <input 
-                      className="flex-1 bg-transparent outline-none px-3 text-[11px]" 
-                      placeholder="Type message..." 
-                      value={newMessage}
-                      onChange={e => setNewMessage(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                      className="flex-1 bg-transparent outline-none px-1 text-[11px]" 
+                      placeholder={uploadingFile ? "Uploading..." : "Type message..."} 
+                      value={newMessage} 
+                      onChange={e => setNewMessage(e.target.value)} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} 
                     />
                     <button onClick={handleSendMessage} className="px-4 py-2 bg-blue-600 rounded-xl text-[10px] font-black uppercase">Send</button>
                   </div>
