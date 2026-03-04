@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-export const revalidate = 60; 
+// Nastavimo na 0, da Vercel prisilimo, da VEDNO potegne sveže cene in ne kaže starih nul!
+export const revalidate = 0; 
 
 export async function GET() {
   try {
@@ -8,12 +9,15 @@ export async function GET() {
     let finalPrices: any = {};
 
     // ==========================================
-    // 1. BINANCE (Kripto - ZASTONJ, NEOMEJENO)
+    // 1. BINANCE (Kripto) - S popravljenim URL-jem!
     // ==========================================
     try {
-      // Tukaj sem dodal še več kripto parov, ker je Binance zastonj!
-      const binanceUrl = 'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT"]';
-      const binanceRes = await fetch(binanceUrl, { next: { revalidate: 60 } });
+      // Pravilno zapakiran URL (encodeURIComponent), da ga Vercel ne blokira
+      const symbols = '["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT"]';
+      const binanceUrl = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`;
+      
+      // cache: 'no-store' prisili Vercel, da vedno vzame svež podatek
+      const binanceRes = await fetch(binanceUrl, { cache: 'no-store' });
       const binanceData = await binanceRes.json();
 
       if (Array.isArray(binanceData)) {
@@ -21,32 +25,30 @@ export async function GET() {
           const cleanSymbol = item.symbol.replace('USDT', '/USD'); 
           finalPrices[cleanSymbol] = { price: parseFloat(item.price).toString() };
         });
+      } else {
+        console.error("Binance ni vrnil seznama:", binanceData);
       }
     } catch (binanceErr) {
       console.error("Binance Fetch Error:", binanceErr);
     }
 
     // ==========================================
-    // 2. TWELVEDATA (Točno 8 parov - NIKOLI VEČ BLOKADE!)
+    // 2. TWELVEDATA (8 parov)
     // ==========================================
     try {
-      // Pustili smo samo 8 najpomembnejših za Forex in Zlato. 
-      // S tem NIKOLI ne presežeš limita 8 kreditov na minuto!
       const tdSymbols = [
         "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD",
         "XAU/USD", "XAG/USD", "US30/USD", "NAS100/USD"
       ].join(',');
 
       const tdUrl = `https://api.twelvedata.com/price?symbol=${tdSymbols}&apikey=${apiKey}`;
-      const tdRes = await fetch(tdUrl, { next: { revalidate: 600 } });
+      const tdRes = await fetch(tdUrl, { cache: 'no-store' });
       const tdData = await tdRes.json();
 
       if (tdData.status !== 'error') {
         Object.keys(tdData).forEach(key => {
           finalPrices[key] = tdData[key];
         });
-      } else {
-        console.error("TwelveData Warning:", tdData.message);
       }
     } catch (tdErr) {
       console.error("TwelveData Fetch Error:", tdErr);
