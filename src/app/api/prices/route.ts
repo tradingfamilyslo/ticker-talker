@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// Strežnik bo osvežil ceno največ enkrat na 1 minuto za Kripto (Binance), 
-// TwelveData pa bo prihranjen zaradi manjšega števila klicev.
 export const revalidate = 60; 
 
 export async function GET() {
@@ -10,16 +8,16 @@ export async function GET() {
     let finalPrices: any = {};
 
     // ==========================================
-    // 1. KRIPTO PREKO BINANCE (Brezplačno, neomejeno)
+    // 1. BINANCE (Kripto - ZASTONJ, NEOMEJENO)
     // ==========================================
     try {
-      const binanceUrl = 'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"]';
+      // Tukaj sem dodal še več kripto parov, ker je Binance zastonj!
+      const binanceUrl = 'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT"]';
       const binanceRes = await fetch(binanceUrl, { next: { revalidate: 60 } });
       const binanceData = await binanceRes.json();
 
       if (Array.isArray(binanceData)) {
         binanceData.forEach((item: any) => {
-          // Pretvorimo Binance ime (BTCUSDT) v tvoj format (BTC/USD)
           const cleanSymbol = item.symbol.replace('USDT', '/USD'); 
           finalPrices[cleanSymbol] = { price: parseFloat(item.price).toString() };
         });
@@ -29,14 +27,14 @@ export async function GET() {
     }
 
     // ==========================================
-    // 2. FOREX, ZLATO IN DELNICE PREKO TWELVEDATA
+    // 2. TWELVEDATA (Točno 8 parov - NIKOLI VEČ BLOKADE!)
     // ==========================================
     try {
-      // Odstranili smo kripto iz tega seznama, da prihranimo ogromno kreditov!
+      // Pustili smo samo 8 najpomembnejših za Forex in Zlato. 
+      // S tem NIKOLI ne presežeš limita 8 kreditov na minuto!
       const tdSymbols = [
-        "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD",
-        "XAU/USD", "XAG/USD", "US30/USD", "NAS100/USD", "SPX500/USD",
-        "AAPL/USD", "TSLA/USD", "NVDA/USD", "AMZN/USD"
+        "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD",
+        "XAU/USD", "XAG/USD", "US30/USD", "NAS100/USD"
       ].join(',');
 
       const tdUrl = `https://api.twelvedata.com/price?symbol=${tdSymbols}&apikey=${apiKey}`;
@@ -44,19 +42,16 @@ export async function GET() {
       const tdData = await tdRes.json();
 
       if (tdData.status !== 'error') {
-        // Združimo TwelveData cene z Binance cenami
         Object.keys(tdData).forEach(key => {
           finalPrices[key] = tdData[key];
         });
       } else {
         console.error("TwelveData Warning:", tdData.message);
-        // Tukaj NE vrnemo errorja, ampak gremo naprej, da stran vsaj pokaže Kripto cene!
       }
     } catch (tdErr) {
       console.error("TwelveData Fetch Error:", tdErr);
     }
 
-    // Vrnemo združene cene nazaj tvoji aplikaciji
     return NextResponse.json(finalPrices);
 
   } catch (error) {
