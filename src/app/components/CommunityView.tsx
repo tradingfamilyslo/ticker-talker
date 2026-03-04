@@ -218,6 +218,24 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     }
   };
 
+  // DODANO: Funkcija za posodobitev stila kanala
+  const handleUpdateStyle = async () => {
+    if (!activeChannel || !isOwnProfile) return;
+    const color = prompt("Enter HEX color for background (e.g. #1a1a1a) or leave empty:", activeChannel.bg_color || "");
+    const img = prompt("Enter URL for background image or leave empty:", activeChannel.bg_image_url || "");
+    
+    const { error } = await supabase.from('community_channels')
+      .update({ bg_color: color, bg_image_url: img })
+      .eq('id', activeChannel.id);
+    
+    if (!error) {
+      alert("Style updated! Refreshing...");
+      fetchHubData();
+      // Posodobimo lokalni state aktivnega kanala
+      setActiveChannel({...activeChannel, bg_color: color, bg_image_url: img});
+    }
+  };
+
   // FUNKCIJA ZA VABLJENJE (Samo za lastnika)
   const handleInviteUser = async () => {
     if (!activeChannel) return;
@@ -305,7 +323,6 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
       })
       .on('presence', { event: 'sync' }, () => {
         const newState = channelSub.presenceState();
-        // newState je objekt z aliasi kot ključi
         setOnlineUsers(Object.keys(newState));
       })
       .subscribe(async (status) => {
@@ -395,7 +412,6 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 )}
               </div>
 
-              {/* DODANO: Vnos za nov kanal s sliko */}
               {showAddChan === cat.id && (
                 <div className="p-2 mb-2 bg-zinc-800/30 rounded-lg border border-zinc-700 space-y-2 animate-in slide-in-from-top-1">
                   <div className="flex items-center gap-2">
@@ -439,7 +455,6 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           : 'text-zinc-400 hover:bg-zinc-800'
                       }`}
                     >
-                      {/* DODANO: Prikaz majhnega logotipa ali privzete ikone */}
                       {chan.logo_url ? (
                         <img src={chan.logo_url} className="w-8 h-8 rounded object-cover shadow-sm shrink-0" />
                       ) : (
@@ -460,17 +475,28 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
         </div>
       </div>
 
-      {/* DESNA STRAN: CHAT */}
-      <div className="flex-1 flex flex-col backdrop-blur-3xl">
+      {/* DESNA STRAN: CHAT AREA */}
+      <div 
+        className="flex-1 flex flex-col relative"
+        style={{ 
+          backgroundColor: activeChannel?.bg_color || (darkMode ? 'transparent' : '#ffffff'),
+          backgroundImage: activeChannel?.bg_image_url ? `url(${activeChannel.bg_image_url})` : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      >
+        {/* Overlay za boljšo berljivost ob sliki ozadja */}
+        {activeChannel?.bg_image_url && <div className="absolute inset-0 bg-black/40 pointer-events-none" />}
+
         {activeChannel ? (
-          <>
-            <div className="p-6 border-b flex justify-between items-center">
+          <div className="relative z-10 flex flex-col h-full">
+            <div className="p-6 border-b flex justify-between items-center backdrop-blur-md bg-black/10">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-3">
                   {activeChannel.logo_url && (
                       <img src={activeChannel.logo_url} className="w-10 h-10 rounded-lg object-cover shadow-md" />
                   )}
-                  <h2 className="text-sm font-black uppercase tracking-widest">
+                  <h2 className="text-sm font-black uppercase tracking-widest text-white shadow-sm">
                     {activeChannel.name}
                   </h2>
                 </div>
@@ -478,16 +504,27 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                 {/* PRIKAZ ONLINE UPORABNIKOV */}
                 <div className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-300 drop-shadow-md">
                     {onlineUsers.length} Online: {onlineUsers.join(', ')}
                   </span>
                 </div>
               </div>
-              {isOwnProfile && activeChannel.is_premium && (
-                <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500">
-                  Invite Member
-                </button>
-              )}
+
+              <div className="flex gap-2">
+                {isOwnProfile && (
+                  <button 
+                    onClick={handleUpdateStyle}
+                    className="text-[9px] font-black uppercase border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 bg-black/20 hover:bg-blue-500/10 transition-all"
+                  >
+                    🎨 Style
+                  </button>
+                )}
+                {isOwnProfile && activeChannel.is_premium && (
+                  <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500 transition-all">
+                    Invite Member
+                  </button>
+                )}
+              </div>
             </div>
 
             {hasAccess ? (
@@ -496,18 +533,18 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                   {messages.map((m: any, i) => (
                     <div key={m.id || i} className={`flex flex-col group ${m.author_id === userData.id ? 'items-end' : 'items-start'}`}>
                       <div className="flex items-center gap-3 mb-1 px-1">
-                        {!isOwnProfile && <span className="text-[7px] font-black uppercase opacity-40">{m.author_alias}</span>}
+                        {!isOwnProfile && <span className="text-[7px] font-black uppercase opacity-60 text-white drop-shadow-md">{m.author_alias}</span>}
                         {m.author_id === userData.id && (
                           <div className="flex gap-3 items-center">
                             <button onClick={() => { setEditingMsgId(m.id); setEditingMsgText(m.text); }} className="text-[12px] hover:scale-125 transition-transform">✏️</button>
                             <button onClick={() => handleDeleteMessage(m.id)} className="text-[12px] hover:scale-125 transition-transform">🗑️</button>
-                            <span className="text-[7px] font-black uppercase opacity-40">{m.author_alias}</span>
+                            <span className="text-[7px] font-black uppercase opacity-60 text-white drop-shadow-md">{m.author_alias}</span>
                           </div>
                         )}
                       </div>
                       
                       {editingMsgId === m.id ? (
-                        <div className="flex flex-col gap-2 bg-zinc-800 p-3 rounded-xl border border-zinc-700 min-w-[200px] shadow-inner">
+                        <div className="flex flex-col gap-2 bg-zinc-800/90 p-3 rounded-xl border border-zinc-700 min-w-[200px] shadow-2xl backdrop-blur-md">
                           <textarea 
                             className="bg-transparent text-[11px] outline-none resize-none h-16 text-white"
                             value={editingMsgText}
@@ -519,7 +556,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                           </div>
                         </div>
                       ) : (
-                        <div className={`p-3 rounded-2xl text-[11px] shadow-sm flex flex-col gap-2 ${m.author_id === userData.id ? 'bg-blue-600 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-zinc-100 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
+                        <div className={`p-3 rounded-2xl text-[11px] shadow-lg flex flex-col gap-2 backdrop-blur-[2px] ${m.author_id === userData.id ? 'bg-blue-600/90 text-white rounded-tr-none' : (darkMode ? 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-none' : 'bg-white/90 border border-zinc-200 text-zinc-900 rounded-tl-none')}`}>
                           {m.file_url && (
                             <a href={m.file_url} target="_blank" rel="noreferrer" className="max-w-xs overflow-hidden rounded-lg">
                                <img src={m.file_url} className="w-full h-auto hover:scale-105 transition-transform" alt="attached" />
@@ -533,40 +570,40 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                   <div ref={messagesEndRef} />
                 </div>
                 
-                <div className="p-6 border-t mt-auto">
-                  <div className="flex items-center gap-2 p-2 rounded-2xl border border-zinc-800 bg-zinc-900/50">
-                    <label className={`p-2 rounded-xl cursor-pointer hover:bg-zinc-800 transition-all ${uploadingFile ? 'animate-pulse opacity-50' : ''}`}>
+                <div className="p-6 border-t mt-auto backdrop-blur-md bg-black/5">
+                  <div className="flex items-center gap-2 p-2 rounded-2xl border border-white/10 bg-black/20">
+                    <label className={`p-2 rounded-xl cursor-pointer hover:bg-white/5 transition-all ${uploadingFile ? 'animate-pulse opacity-50' : ''}`}>
                        <span className="text-lg">📎</span>
                        <input type="file" className="hidden" onChange={handleChatFileUpload} disabled={uploadingFile} />
                     </label>
                     <input 
-                      className="flex-1 bg-transparent outline-none px-1 text-[11px]" 
+                      className="flex-1 bg-transparent outline-none px-1 text-[11px] text-white placeholder-zinc-400" 
                       placeholder={uploadingFile ? "Uploading..." : "Type message..."} 
                       value={newMessage} 
                       onChange={e => setNewMessage(e.target.value)} 
                       onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} 
                     />
-                    <button onClick={handleSendMessage} className="px-4 py-2 bg-blue-600 rounded-xl text-[10px] font-black uppercase">Send</button>
+                    <button onClick={handleSendMessage} className="px-4 py-2 bg-blue-600 rounded-xl text-[10px] font-black uppercase text-white shadow-lg hover:bg-blue-500 transition-all">Send</button>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-10 text-center animate-in fade-in backdrop-blur-xl">
-                <span className="text-6xl mb-6 block">🔒</span>
-                <h2 className="text-xl font-bold uppercase tracking-widest text-white">VIP Access Restricted</h2>
-                <p className="text-zinc-500 text-[10px] uppercase mt-2 max-w-xs leading-relaxed">
+              <div className="flex-1 flex flex-col items-center justify-center p-10 text-center animate-in fade-in backdrop-blur-xl bg-black/20">
+                <span className="text-6xl mb-6 block shadow-sm">🔒</span>
+                <h2 className="text-xl font-bold uppercase tracking-widest text-white drop-shadow-md">VIP Access Restricted</h2>
+                <p className="text-zinc-300 text-[10px] uppercase mt-2 max-w-xs leading-relaxed drop-shadow-md">
                   This channel is reserved for VIP subscribers or members with a special invitation.
                 </p>
-                <button className="mt-8 px-8 py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg">
+                <button className="mt-8 px-8 py-4 bg-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">
                   Upgrade to VIP Access
                 </button>
               </div>
             )}
-          </>
+          </div>
         ) : (
-          <div className="m-auto text-center opacity-20">
+          <div className="m-auto text-center opacity-20 relative z-10">
             <p className="text-4xl">📡</p>
-            <p className="text-[10px] font-black uppercase mt-4">Create or select a channel to start broadcasting</p>
+            <p className="text-[10px] font-black uppercase mt-4 text-white">Create or select a channel to start broadcasting</p>
           </div>
         )}
       </div>
