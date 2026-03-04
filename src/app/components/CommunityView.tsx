@@ -63,11 +63,18 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
         channels: chans ? chans.filter(c => c.category_id === cat.id) : []
       }));
       setCategories(combined);
+      
       if (!activeChannel && combined[0]?.channels[0]) {
         const firstChan = combined[0].channels[0];
         setActiveChannel(firstChan);
         setTempColorA(firstChan.bg_color || "#1a1a1a");
         setTempColorB(firstChan.bg_image_url || "#000000");
+      } else if (activeChannel) {
+        // Osvežimo aktivni kanal, da ohranimo barve po refreshu
+        const current = chans?.find(c => c.id === activeChannel.id);
+        if (current) {
+          setActiveChannel(current);
+        }
       }
     }
   };
