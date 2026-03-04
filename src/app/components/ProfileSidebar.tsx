@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import PriceTicker from './PriceTicker';
 
 export default function ProfileSidebar({ 
   userData, 
@@ -320,6 +321,20 @@ export default function ProfileSidebar({
                 }`}
               >
                 📈 Trading Journal
+              </button>
+
+              {/* DODANO: Gumb za Community Channels */}
+              <button 
+                onClick={() => {
+                   setActiveTab('community');
+                }} 
+                className={`w-full text-[10px] font-black py-3 rounded-xl uppercase border transition-all ${
+                  activeTab === 'community'
+                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg' 
+                    : (darkMode ? 'bg-blue-500/10 border-blue-500/20 text-blue-500 hover:bg-blue-500/20' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100')
+                }`}
+              >
+                🌐 Community Channels
               </button>
 
               <button 

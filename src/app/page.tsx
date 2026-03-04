@@ -94,7 +94,8 @@ export default function Home() {
     binance_key: '',         // DODANO: Binance Key
     mql5_url: '',            // DODANO: MQL5 URL
     gains_balance: 0,        // DODANO: Stanje denarnice
-    earned_balance: 0        // DODANO: Zaslužek
+    earned_balance: 0,       // DODANO: Zaslužek
+    subscription_price: 0    // POPRAVEK: Začetna vrednost
   });
 
   const [loginAlias, setLoginAlias] = useState("");
@@ -388,9 +389,10 @@ export default function Home() {
   // --- POPRAVLJENO: IZRAČUN STATISTIKE IZ SIGNALOV (NE GLASOV) ---
   const fetchAllProfiles = async () => {
     try {
+      // POPRAVEK: Tukaj sem dodal branje 'subscription_price'
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, alias, country, avatar_url, style, verify_source, earned_balance');
+        .select('id, alias, country, avatar_url, style, verify_source, earned_balance, subscription_price');
         
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -436,6 +438,7 @@ export default function Home() {
             total_gain: totalWins,       
             max_drawdown: totalLosses,   
             win_rate: winRate,           
+            subscription_price: p.subscription_price || 0, // POPRAVEK: Shranjena cena naročnine
             myfxbook_url: '' 
           };
         });
@@ -594,6 +597,7 @@ export default function Home() {
         country: userData.country,
         style: userData.style,
         market: userData.market,
+        subscription_price: userData.subscription_price || 0, // POPRAVEK: TUKAJ SEM DODAL SHRANJEVANJE CENE!
         verify_source: 'manual', 
         updated_at: new Date()
       };
@@ -952,6 +956,7 @@ export default function Home() {
             max_drawdown: profileData.max_drawdown || 0,
             win_rate: profileData.win_rate || 0,
             verify_source: profileData.verify_source || 'manual',
+            subscription_price: profileData.subscription_price || 0, // POPRAVEK: Da si zapomni po osvežitvi!
             gains_balance: balanceData?.bulls_balance || 0,
             earned_balance: profileData.earned_balance || 0 
           }));
@@ -1187,7 +1192,8 @@ export default function Home() {
                         total_gain: allProfiles.find(p => p.alias === viewingAlias)?.total_gain || 0,
                         max_drawdown: allProfiles.find(p => p.alias === viewingAlias)?.max_drawdown || 0,
                         win_rate: allProfiles.find(p => p.alias === viewingAlias)?.win_rate || 0,
-                        verify_source: allProfiles.find(p => p.alias === viewingAlias)?.verify_source || 'manual'
+                        verify_source: allProfiles.find(p => p.alias === viewingAlias)?.verify_source || 'manual',
+                        subscription_price: allProfiles.find(p => p.alias === viewingAlias)?.subscription_price || 0 // POPRAVEK: Prenos cene za prikaz
                       } 
                     : userData
                   } 

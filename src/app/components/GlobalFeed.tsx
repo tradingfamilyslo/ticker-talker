@@ -33,15 +33,86 @@ export default function GlobalFeed({
   const [openComments, setOpenComments] = useState<{[key: string]: boolean}>({});
   const [commentInputs, setCommentInputs] = useState<{[key: string]: string}>({});
   
+  // --- NOVO: STANJE ZA NEPREBRANE KOMENTARJE ---
+  const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({});
+
   const safePosts = Array.isArray(posts) ? posts : [];
 
   useEffect(() => {
     if (safePosts.length > 0) {
       setLastPostId(safePosts[0].id);
       const timer = setTimeout(() => setLastPostId(null), 3000);
-      return () => clearTimeout(timer);
+      
+      // --- NOVO: PRIDOBI ŠTEVCE OB NALAGANJU ---
+      safePosts.forEach(post => {
+        fetchUnreadCount(post.id);
+      });
+
+      // --- NOVO: REALTIME POSLUŠANJE ZA NOVE KOMENTARJE ---
+      const channel = supabase
+        .channel('public:post_comments')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'post_comments' },
+          (payload) => {
+            const newComment = payload.new;
+            if (newComment.user_id !== userData?.id) {
+              setUnreadCounts(prev => ({
+                ...prev,
+                [newComment.post_id]: (prev[newComment.post_id] || 0) + 1
+              }));
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        clearTimeout(timer);
+        supabase.removeChannel(channel); // Počisti kanal, ko gremo stran
+      };
     }
-  }, [safePosts.length]); 
+  }, [safePosts.length, userData?.id]); 
+
+  // --- NOVO: FUNKCIJA ZA PREŠTETJE NEPREBRANIH KOMENTARJEV ---
+  const fetchUnreadCount = async (postId: string) => {
+    if (!userData?.id) return;
+
+    const { data: viewData } = await supabase
+      .from('post_views')
+      .select('last_viewed_at')
+      .eq('user_id', userData.id)
+      .eq('post_id', postId)
+      .single();
+
+    const lastViewed = viewData?.last_viewed_at || new Date(0).toISOString();
+
+    const { count, error } = await supabase
+      .from('post_comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('post_id', postId)
+      .gt('created_at', lastViewed);
+
+    if (!error && count !== null) {
+      setUnreadCounts(prev => ({ ...prev, [postId]: count }));
+    }
+  };
+
+  // --- NOVO: FUNKCIJA ZA PONASTAVITEV ŠTEVCA OB KLIKU ---
+  const markAsRead = async (postId: string) => {
+    if (!userData?.id) return;
+
+    const { error } = await supabase
+      .from('post_views')
+      .upsert({ 
+        user_id: userData.id, 
+        post_id: postId, 
+        last_viewed_at: new Date().toISOString() 
+      }, { onConflict: 'user_id,post_id' });
+
+    if (!error) {
+      setUnreadCounts(prev => ({ ...prev, [postId]: 0 }));
+    }
+  };
 
   // --- FUNKCIJA ZA PRIDOBIVANJE KOMENTARJEV ---
   const fetchComments = async (postId: string) => {
@@ -71,12 +142,14 @@ export default function GlobalFeed({
     if (!error) {
       setCommentInputs(prev => ({ ...prev, [postId]: '' }));
       fetchComments(postId); 
+      markAsRead(postId); // --- NOVO: KO KOMENTIRAŠ, SE ŠTEVEC PONASTAVI ---
     }
   };
 
   const toggleComments = (postId: string) => {
     if (!openComments[postId]) {
       fetchComments(postId);
+      markAsRead(postId); // --- NOVO: KO ODREŠ KOMENTARJE, SE ŠTEVEC PONASTAVI ---
     }
     setOpenComments(prev => ({ ...prev, [postId]: !prev[postId] }));
   };
@@ -416,7 +489,7 @@ export default function GlobalFeed({
 
                             <button 
                               onClick={() => toggleComments(post.id)}
-                              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-3 md:py-1.5 rounded-xl border transition-all ${
+                              className={`relative flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-3 md:py-1.5 rounded-xl border transition-all ${
                                 openComments[post.id] 
                                   ? (darkMode ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-600')
                                   : (darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-blue-400' : 'bg-white border-zinc-200 text-zinc-600 hover:text-blue-600')
@@ -426,6 +499,13 @@ export default function GlobalFeed({
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48L4.32 20.587A.5.5 0 0 0 4.807 21h.023l2.87-.82A8.956 8.956 0 0 0 12 20.25Z" />
                               </svg>
                               <span className="text-[9px] font-black uppercase tracking-tighter">Intel Feed</span>
+                              
+                              {/* --- NOVO: RDEČA ŠTEVILKA ZA NOVE KOMENTARJE --- */}
+                              {(unreadCounts[post.id] || 0) > 0 && !openComments[post.id] && (
+                                <div className="absolute -top-2 -right-2 bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-black animate-bounce z-10 shadow-lg">
+                                  {unreadCounts[post.id]}
+                                </div>
+                              )}
                             </button>
 
                             <button 
