@@ -962,21 +962,42 @@ export default function Home() {
     };
     checkUser();
 
-    // POPRAVEK JE TUKAJ
+    // POPRAVLJENA FUNKCIJA (Vleče Binance direktno iz brskalnika)
     const fetchPrices = async () => {
       try {
-        const res = await fetch('/api/prices');
-        const data = await res.json();
-        
-        if (data.error) {
-          console.error("Server API Error:", data.error);
-          return;
+        let combinedData: any = {};
+
+        // 1. DIREKTEN KLIC NA BINANCE IZ BRSKALNIKA (Zaobide Vercel USA blokado!)
+        try {
+          const symbols = '["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"]';
+          const binanceUrl = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`;
+          const binanceRes = await fetch(binanceUrl);
+          const binanceData = await binanceRes.json();
+          if (Array.isArray(binanceData)) {
+            binanceData.forEach((item: any) => {
+              const cleanSymbol = item.symbol.replace('USDT', '/USD');
+              combinedData[cleanSymbol] = { price: parseFloat(item.price).toString() };
+            });
+          }
+        } catch (err) {
+          console.error("Browser Binance Fetch Error:", err);
         }
 
-        const newBtc = data['BTC/USD'] ? parseFloat(data['BTC/USD'].price) : prevPrices.current.btc;
-        const newEur = data['EUR/USD'] ? parseFloat(data['EUR/USD'].price) : prevPrices.current.eur;
-        const newXau = data['XAU/USD'] ? parseFloat(data['XAU/USD'].price) : prevPrices.current.xau;
-        const newEth = data['ETH/USD'] ? parseFloat(data['ETH/USD'].price) : prevPrices.current.eth;
+        // 2. KLIC NA NAŠ VERCEL API (za Forex in Zlato preko TwelveData)
+        try {
+          const res = await fetch('/api/prices');
+          const data = await res.json();
+          if (!data.error) {
+            combinedData = { ...combinedData, ...data };
+          }
+        } catch (err) {
+          console.error("Vercel API Fetch Error:", err);
+        }
+
+        const newBtc = combinedData['BTC/USD'] ? parseFloat(combinedData['BTC/USD'].price) : prevPrices.current.btc;
+        const newEur = combinedData['EUR/USD'] ? parseFloat(combinedData['EUR/USD'].price) : prevPrices.current.eur;
+        const newXau = combinedData['XAU/USD'] ? parseFloat(combinedData['XAU/USD'].price) : prevPrices.current.xau;
+        const newEth = combinedData['ETH/USD'] ? parseFloat(combinedData['ETH/USD'].price) : prevPrices.current.eth;
 
         const newPricesObject = { btc: newBtc, eur: newEur, xau: newXau, eth: newEth };
 
