@@ -962,6 +962,7 @@ export default function Home() {
     };
     checkUser();
 
+    // POPRAVEK JE TUKAJ
     const fetchPrices = async () => {
       try {
         const res = await fetch('/api/prices');
@@ -972,25 +973,24 @@ export default function Home() {
           return;
         }
 
-        if (data['BTC/USD'] && data['ETH/USD'] && data['EUR/USD'] && data['XAU/USD']) {
-          const newBtc = parseFloat(data['BTC/USD'].price);
-          const newEur = parseFloat(data['EUR/USD'].price);
-          const newXau = parseFloat(data['XAU/USD'].price);
-          const newEth = parseFloat(data['ETH/USD'].price);
+        const newBtc = data['BTC/USD'] ? parseFloat(data['BTC/USD'].price) : prevPrices.current.btc;
+        const newEur = data['EUR/USD'] ? parseFloat(data['EUR/USD'].price) : prevPrices.current.eur;
+        const newXau = data['XAU/USD'] ? parseFloat(data['XAU/USD'].price) : prevPrices.current.xau;
+        const newEth = data['ETH/USD'] ? parseFloat(data['ETH/USD'].price) : prevPrices.current.eth;
 
-          const newPricesObject = { btc: newBtc, eur: newEur, xau: newXau, eth: newEth };
+        const newPricesObject = { btc: newBtc, eur: newEur, xau: newXau, eth: newEth };
 
-          setPriceFlash({
-            btc: newBtc > prevPrices.current.btc ? 'text-green-500' : (newBtc < prevPrices.current.btc ? 'text-red-500' : ''),
-            eur: newEur > prevPrices.current.eur ? 'text-green-500' : (newEur < prevPrices.current.eur ? 'text-red-500' : ''),
-            xau: newXau > prevPrices.current.xau ? 'text-green-500' : (newXau < prevPrices.current.xau ? 'text-red-500' : ''),
-            eth: newEth > prevPrices.current.eth ? 'text-green-500' : (newEth < prevPrices.current.eth ? 'text-red-500' : '')
-          });
+        setPriceFlash({
+          btc: newBtc > prevPrices.current.btc ? 'text-green-500' : (newBtc < prevPrices.current.btc ? 'text-red-500' : ''),
+          eur: newEur > prevPrices.current.eur ? 'text-green-500' : (newEur < prevPrices.current.eur ? 'text-red-500' : ''),
+          xau: newXau > prevPrices.current.xau ? 'text-green-500' : (newXau < prevPrices.current.xau ? 'text-red-500' : ''),
+          eth: newEth > prevPrices.current.eth ? 'text-green-500' : (newEth < prevPrices.current.eth ? 'text-red-500' : '')
+        });
 
-          setPrices(newPricesObject);
-          prevPrices.current = newPricesObject;
-          setTimeout(() => setPriceFlash({ btc: '', eur: '', xau: '', eth: '' }), 1000);
-        }
+        setPrices(newPricesObject);
+        prevPrices.current = newPricesObject;
+        setTimeout(() => setPriceFlash({ btc: '', eur: '', xau: '', eth: '' }), 1000);
+        
       } catch (e) { 
         console.error("Fetch Error:", e); 
       }
