@@ -13,6 +13,7 @@ import TradingJournal from './components/TradingJournal';
 import WalletView from './components/WalletView'; 
 import AdBanner from './components/AdBanner'; 
 import AdCreatorModal from './components/AdCreatorModal'; 
+import CommunityView from './components/CommunityView'; // DODAN UVOZ ZA DISCORD HUB
 
 // TUKAJ UVOZI SVOJ SUPABASE CLIENT
 import { supabase } from '@/lib/supabaseClient';
@@ -962,12 +963,10 @@ export default function Home() {
     };
     checkUser();
 
-    // POPRAVLJENA FUNKCIJA (Vleče Binance direktno iz brskalnika)
     const fetchPrices = async () => {
       try {
         let combinedData: any = {};
 
-        // 1. DIREKTEN KLIC NA BINANCE IZ BRSKALNIKA (Zaobide Vercel USA blokado!)
         try {
           const symbols = '["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"]';
           const binanceUrl = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`;
@@ -983,7 +982,6 @@ export default function Home() {
           console.error("Browser Binance Fetch Error:", err);
         }
 
-        // 2. KLIC NA NAŠ VERCEL API (za Forex in Zlato preko TwelveData)
         try {
           const res = await fetch('/api/prices');
           const data = await res.json();
@@ -1481,6 +1479,15 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+                </div>
+              ) : activeTab === 'community' ? (
+                // DODANO ZA DISCORD HUB PRIKAZ
+                <div className="animate-in fade-in duration-500 w-full mb-32">
+                  <CommunityView 
+                    userData={userData} 
+                    darkMode={darkMode} 
+                    onBack={() => setActiveTab('feed')} 
+                  />
                 </div>
               ) : (
                 <div className="animate-in fade-in duration-500 space-y-6 w-full">
