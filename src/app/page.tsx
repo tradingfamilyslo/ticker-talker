@@ -1110,21 +1110,27 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- LOGO --- */}
-      <div className="flex flex-col items-center space-y-4 mb-10 text-center pt-10 px-4">
-        <img 
-          src="/Logo.png" 
-          alt="Gain Wave Logo" 
-          className={`h-24 md:h-32 object-contain transition-all duration-500 ${
-            darkMode 
-              ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]' 
-              : 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] opacity-90'
-          }`} 
-        />
-        <p className={`text-base md:text-xl font-light italic uppercase tracking-widest ${
-          darkMode ? 'text-blue-300' : 'text-blue-600'
+      {/* --- NEONSKI LOGOTIP (Povečan in popravljen) --- */}
+      <div className="flex flex-col items-center mb-10 text-center pt-10 px-4">
+        <h1 className="relative group cursor-pointer text-center mb-4">
+          {/* Sijaj v ozadju */}
+          <span className="absolute -inset-4 rounded-full bg-blue-600/20 blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-700"></span>
+          
+          {/* Glavni napis */}
+          <span className={`relative text-5xl md:text-7xl font-black uppercase tracking-[-0.05em] leading-none transition-all duration-500 ${
+            darkMode ? 'text-white drop-shadow-[0_0_20px_rgba(59,130,246,0.8)]' : 'text-zinc-900 drop-shadow-[0_4px_6px_rgba(0,0,0,0.2)]'
+          }`}>
+            Gain<span className="text-blue-500">Wave</span>
+          </span>
+          
+          {/* Spodnja dekorativna črta */}
+          <span className="absolute -bottom-3 left-0 w-full h-1.5 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(59,130,246,1)] scale-x-110"></span>
+        </h1>
+        
+        <p className={`mt-6 text-[9px] md:text-[10px] font-extralight uppercase tracking-[0.6em] transition-colors duration-500 ${
+          darkMode ? 'text-blue-300 opacity-60' : 'text-blue-600 opacity-80'
         }`}>
-          "Where the word becomes profit."
+          Where the word becomes profit.
         </p>
       </div>
 
@@ -1207,7 +1213,7 @@ export default function Home() {
             
             {activeTab === 'profile' && (
               <div className="md:col-span-1 space-y-4">
-                <ProfileSidebar 
+                < ProfileSidebar 
                   userData={(viewingAlias && viewingAlias !== userData.alias) 
                     ? { 
                         id: posts.find(p => p.authorAlias === viewingAlias)?.user_id || allProfiles.find(p => p.alias === viewingAlias)?.id || '', 
