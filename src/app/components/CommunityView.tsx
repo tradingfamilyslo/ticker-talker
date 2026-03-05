@@ -17,6 +17,11 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   // NOVO: Seznam vseh Hubov, kjer je uporabnik član (za navigacijo z ikonami)
   const [myHubs, setMyHubs] = useState<any[]>([]);
 
+  // NOVO: Iskalnik za vabilo
+  const [showInviteSearch, setShowInviteSearch] = useState(false);
+  const [inviteSearchTerm, setInviteSearchTerm] = useState("");
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
+
   // State za urejanje sporočil
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingMsgText, setEditingMsgText] = useState("");
@@ -44,6 +49,15 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
   const [uploadingFile, setUploadingFile] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Nalaganje vseh profilov za iskalnik vabil
+  useEffect(() => {
+    const fetchAllProfiles = async () => {
+      const { data } = await supabase.from('profiles').select('alias, avatar_url, country');
+      if (data) setAllProfiles(data);
+    };
+    fetchAllProfiles();
+  }, []);
 
   // 1. Nalaganje kategorij in kanalov za SPECIFIČNEGA TRADERJA
   const fetchHubData = async () => {
@@ -288,31 +302,35 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
     }
   };
 
-  // NOVO: Posodobljen sistem vabil s funkcijo My Hubs
-  const handleInviteUser = async () => {
+  // NOVO: Posodobljen sistem vabil s funkcijo My Hubs in Search barom
+  const handleSendInvite = async (targetAlias: string) => {
     if (!activeChannel) return;
-    const userAlias = prompt("Enter the Alias of the user you want to invite:");
-    if (!userAlias) return;
 
-    const { data: profile } = await supabase.from('profiles').select('id').eq('alias', userAlias).single();
-
-    if (!profile) {
-      alert("User not found!");
-      return;
-    }
+    const { data: profile } = await supabase.from('profiles').select('id').eq('alias', targetAlias).single();
+    if (!profile) return;
 
     // 1. Dodelimo dostop do kanala
     const { error: invErr } = await supabase.from('community_invites').insert([
       { channel_id: activeChannel.id, user_id: profile.id, invited_by: userData.id }
     ]);
 
-    // 2. Dodamo v tabelo My Hubs (da uporabnik vidi ikono tvojega Huba)
+    // 2. Dodamo v tabelo My Hubs
     await supabase.from('user_hub_memberships').upsert([
       { user_id: profile.id, hub_owner_id: userData.id }
     ]);
 
-    if (invErr) alert("User already has access or an error occurred.");
-    else alert(`Access granted and invitation sent to ${userAlias}!`);
+    // 3. Pošljemo vabilo v klepet (Inbox)
+    const inviteLink = `${window.location.origin}/profile/${userData.alias}`;
+    await supabase.from('messages').insert([{
+      from_alias: userData.alias,
+      to_alias: targetAlias,
+      text: `👋 Hey! You have been invited to join my Hub: ${activeChannel.name}. Click to join!`,
+      is_read: false
+    }]);
+
+    if (invErr) alert("User already invited.");
+    else alert(`Invitation sent to ${targetAlias}!`);
+    setShowInviteSearch(false);
   };
 
   // PREVERJANJE DOSTOPA (VIP ali Invite ali Naročnina)
@@ -452,6 +470,46 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
           <span className="text-xl">⚙️</span>
         </button>
       </div>
+
+      {/* NOVO: MODAL ZA POVABILO PRIJATELJA */}
+      {showInviteSearch && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in">
+          <div className={`w-full max-w-sm rounded-[2.5rem] border p-6 ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200 shadow-2xl'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Invite Friend to Hub</h3>
+              <button onClick={() => setShowInviteSearch(false)} className="text-zinc-500 hover:text-white transition-colors">✕</button>
+            </div>
+            
+            <input 
+              className={`w-full p-4 rounded-2xl border text-xs mb-4 outline-none ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200'}`}
+              placeholder="Search alias..."
+              value={inviteSearchTerm}
+              onChange={(e) => setInviteSearchTerm(e.target.value)}
+            />
+
+            <div className="max-h-60 overflow-y-auto space-y-2 custom-scrollbar">
+              {allProfiles
+                .filter(p => p.alias.toLowerCase().includes(inviteSearchTerm.toLowerCase()) && p.alias !== userData.alias)
+                .map(p => (
+                  <div 
+                    key={p.alias} 
+                    onClick={() => handleSendInvite(p.alias)}
+                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-all ${darkMode ? 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800' : 'border-zinc-100 bg-zinc-50 hover:bg-zinc-100'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <img src={p.avatar_url || '/default-avatar.png'} className="w-8 h-8 rounded-lg object-cover" />
+                      <span className="text-[10px] font-black uppercase">{p.alias}</span>
+                    </div>
+                    <span className="text-xs text-blue-500">➕</span>
+                  </div>
+                ))}
+              {allProfiles.filter(p => p.alias.toLowerCase().includes(inviteSearchTerm.toLowerCase())).length === 0 && (
+                <p className="text-center text-[9px] opacity-40 py-4">No users found</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={`flex flex-col md:flex-row h-[75vh] min-h-[600px] w-full rounded-[2.5rem] border overflow-hidden shadow-2xl ${
         darkMode ? 'bg-zinc-950/80 border-zinc-800' : 'bg-white border-zinc-200'
@@ -628,7 +686,7 @@ export default function CommunityView({ userData, darkMode, onBack, isOwnProfile
                     </div>
                   )}
                   {isOwnProfile && (
-                    <button onClick={handleInviteUser} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500 shadow-lg flex items-center gap-2">
+                    <button onClick={() => setShowInviteSearch(true)} className="text-[9px] font-black uppercase bg-blue-600 px-3 py-2 rounded-lg text-white hover:bg-blue-500 shadow-lg flex items-center gap-2">
                       <span>👤</span> Invite Member
                     </button>
                   )}
