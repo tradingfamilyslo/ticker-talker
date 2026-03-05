@@ -70,6 +70,9 @@ export default function Home() {
 
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
 
+  // NOVO: State za tvoje Hube
+  const [myHubs, setMyHubs] = useState<any[]>([]);
+
   const [userData, setUserData] = useState<any>({
     id: '', 
     alias: '', 
@@ -105,6 +108,26 @@ export default function Home() {
   useEffect(() => {
     activeChatRef.current = activeChat;
   }, [activeChat]);
+
+  // NOVO: Pridobivanje vseh Hubov, kjer je uporabnik član
+  const fetchMyHubs = async () => {
+    if (!userData?.id) return;
+    const { data: memberships } = await supabase
+      .from('user_hub_memberships')
+      .select('hub_owner_id, profiles!hub_owner_id(alias, avatar_url)')
+      .eq('user_id', userData.id);
+
+    if (memberships) {
+      // Za vsak Hub preverimo še neprebrana sporočila (demo logika)
+      const hubsWithStatus = memberships.map((m: any) => ({
+        id: m.hub_owner_id,
+        alias: m.profiles.alias,
+        avatar: m.profiles.avatar_url,
+        hasNew: false // Tukaj bova kasneje dodala še SQL check za rdečo piko
+      }));
+      setMyHubs(hubsWithStatus);
+    }
+  };
 
   // POPRAVLJENA FUNKCIJA ZA STRIPE (Podpira Top-up in VIP Naročnino)
   const handleStripePurchase = async (amount: number, targetTraderId?: string) => {
@@ -418,7 +441,7 @@ export default function Home() {
           const totalValidTrades = totalWins + totalLosses;
           
           if (totalValidTrades > 0) {
-             winRate = Math.round((totalWins / totalValidTrades) * 100);
+              winRate = Math.round((totalWins / totalValidTrades) * 100);
           }
           
           return {
@@ -546,6 +569,7 @@ export default function Home() {
   useEffect(() => {
     if (userData.id) {
       fetchFollowData();
+      fetchMyHubs();
     }
   }, [userData.id, viewingAlias]);
 
@@ -1167,6 +1191,37 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* NOVO: Navigacijska vrstica MY HUBS (Vstavljeno neposredno v page) */}
+          <div className="max-w-7xl mx-auto mb-6 w-full px-4">
+            <div className={`flex gap-4 p-4 overflow-x-auto rounded-[2rem] border backdrop-blur-md ${darkMode ? 'bg-zinc-900/40 border-zinc-800' : 'bg-white/40 border-zinc-200 shadow-sm'}`}>
+              <p className="text-[8px] font-black uppercase text-zinc-500 self-center rotate-180 [writing-mode:vertical-lr] opacity-50">My Network</p>
+              
+              {myHubs.map(hub => (
+                <button 
+                  key={hub.id}
+                  onClick={() => handleVisitProfile(hub.alias)}
+                  className="relative group shrink-0"
+                >
+                  <div className={`w-12 h-12 rounded-2xl border-2 transition-all duration-300 group-hover:scale-110 ${hub.hasNew ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : (darkMode ? 'border-white/10' : 'border-zinc-200')}`}>
+                    <img src={hub.avatar || '/default-avatar.png'} className="w-full h-full rounded-xl object-cover" alt={hub.alias} />
+                  </div>
+                  {hub.hasNew && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-zinc-950 flex items-center justify-center animate-bounce z-10">
+                      <span className="text-[8px] font-bold text-white">!</span>
+                    </div>
+                  )}
+                  <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[7px] font-black uppercase opacity-0 group-hover:opacity-100 transition-all text-blue-500 whitespace-nowrap tracking-widest">
+                    {hub.alias}
+                  </span>
+                </button>
+              ))}
+              
+              <button className={`w-12 h-12 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all ${darkMode ? 'border-zinc-700 text-zinc-600 hover:text-white hover:border-white' : 'border-zinc-200 text-zinc-400 hover:text-blue-500 hover:border-blue-500'}`}>
+                <span className="text-xl">⚙️</span>
+              </button>
+            </div>
+          </div>
 
           {/* OSREDNJI ISKALNIK */}
           <div className="max-w-2xl mx-auto mb-10 w-full px-4">
